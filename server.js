@@ -1,9 +1,18 @@
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import {
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+  createHash,
+} from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
 import { resolve, dirname, join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
+import JSZip from "jszip";
+import { auditClaim, settle, validMonth, CHECKS } from "./lib/liquidation.js";
+import { bankFile, BANK_PROFILES, relationshipCsv } from "./lib/banks.js";
+import { paymentWorkbook } from "./lib/workbook.js";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const STATES = ["Radicada", "En revisión", "Devuelta", "Aprobada"];
@@ -76,6 +85,10 @@ export function createApp(options = {}) {
     CREATE TABLE IF NOT EXISTS claims(id INTEGER PRIMARY KEY, radicado TEXT UNIQUE, user_id INTEGER NOT NULL REFERENCES users(id), contract_id INTEGER NOT NULL REFERENCES contracts(id), period TEXT NOT NULL, amount INTEGER NOT NULL, description TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'Radicada', created TEXT NOT NULL, updated TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}');
     CREATE TABLE IF NOT EXISTS documents(id INTEGER PRIMARY KEY, claim_id INTEGER NOT NULL REFERENCES claims(id), kind TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, bytes BLOB NOT NULL, UNIQUE(claim_id, kind));
     CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, claim_id INTEGER NOT NULL REFERENCES claims(id), user_id INTEGER NOT NULL REFERENCES users(id), status TEXT NOT NULL, note TEXT NOT NULL, created TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS audits(claim_id INTEGER PRIMARY KEY REFERENCES claims(id), body TEXT NOT NULL, reviewer_id INTEGER NOT NULL REFERENCES users(id), reviewed_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS lots(id TEXT PRIMARY KEY, period TEXT UNIQUE NOT NULL, created TEXT NOT NULL, creator_id INTEGER NOT NULL REFERENCES users(id), profile TEXT NOT NULL, payer TEXT NOT NULL, report TEXT NOT NULL, snapshot TEXT NOT NULL, hash TEXT NOT NULL, bank_text TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS lot_claims(claim_id INTEGER PRIMARY KEY REFERENCES claims(id), lot_id TEXT NOT NULL REFERENCES lots(id));
+    CREATE TABLE IF NOT EXISTS integration_events(id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT UNIQUE NOT NULL, type TEXT NOT NULL, entity_id TEXT NOT NULL, payload TEXT NOT NULL, created TEXT NOT NULL);
   `);
   // Preserve data from the first local prototype when allowing multiple accounts per month.
   if (
@@ -174,14 +187,35 @@ export function createApp(options = {}) {
   const claimRow = (id) =>
     db
       .prepare(
-        `SELECT c.*,u.name AS contractor_name,u.email AS contractor_email,u.document AS contractor_document,t.number AS contract_number,t.object AS contract_object,t.supervisor FROM claims c JOIN users u ON u.id=c.user_id JOIN contracts t ON t.id=c.contract_id WHERE c.id=?`,
+        `SELECT c.*,u.name AS contractor_name,u.email AS contractor_email,u.document AS contractor_document,t.number AS contract_number,t.object AS contract_object,t.supervisor,t.monthly_amount FROM claims c JOIN users u ON u.id=c.user_id JOIN contracts t ON t.id=c.contract_id WHERE c.id=?`,
       )
       .get(id);
   const claimDetail = (id) => {
     const row = claimRow(id);
+    const auditRow = db
+      .prepare(
+        "SELECT a.*,u.name AS reviewer FROM audits a JOIN users u ON u.id=a.reviewer_id WHERE claim_id=?",
+      )
+      .get(id);
+    const account = db
+      .prepare("SELECT bytes FROM documents WHERE claim_id=? AND kind='cuenta'")
+      .get(id);
     return {
       ...row,
       metadata: JSON.parse(row.metadata),
+      audit: auditRow
+        ? {
+            ...JSON.parse(auditRow.body),
+            reviewer: auditRow.reviewer,
+            reviewed_at: auditRow.reviewed_at,
+          }
+        : null,
+      account_hash: account
+        ? createHash("sha256").update(account.bytes).digest("hex")
+        : null,
+      lot_id:
+        db.prepare("SELECT lot_id FROM lot_claims WHERE claim_id=?").get(id)
+          ?.lot_id || null,
       documents: db
         .prepare(
           "SELECT id,kind,name,mime,length(bytes) AS size FROM documents WHERE claim_id=? ORDER BY id",
@@ -193,6 +227,132 @@ export function createApp(options = {}) {
         )
         .all(id),
     };
+  };
+  const allClaims = () =>
+    db
+      .prepare("SELECT id FROM claims ORDER BY id")
+      .all()
+      .map((c) => claimDetail(c.id));
+  const emit = (type, entityId, payload) =>
+    db
+      .prepare(
+        "INSERT INTO integration_events(event_id,type,entity_id,payload,created) VALUES(?,?,?,?,?)",
+      )
+      .run(
+        randomBytes(16).toString("hex"),
+        type,
+        String(entityId),
+        JSON.stringify(payload),
+        new Date().toISOString(),
+      );
+  const lots = () =>
+    db
+      .prepare("SELECT * FROM lots ORDER BY period")
+      .all()
+      .map((l) => ({
+        ...l,
+        payer: JSON.parse(l.payer),
+        report: JSON.parse(l.report),
+        snapshot: JSON.parse(l.snapshot),
+      }));
+  const publicLot = (l) => ({
+    id: l.id,
+    period: l.period,
+    created: l.created,
+    profile: l.profile,
+    hash: l.hash,
+    total: l.report.totals.net,
+    count: l.report.rows.length,
+    state: "Preparado para pago",
+  });
+  const download = (res, bytes, name, type) => {
+    res.writeHead(200, {
+      "Content-Type": type,
+      "Content-Disposition": `attachment; filename="${name}"`,
+      "Cache-Control": "no-store",
+    });
+    res.end(bytes);
+  };
+  const reviewBody = (b) => {
+    if (
+      !b ||
+      typeof b !== "object" ||
+      Array.isArray(b) ||
+      JSON.stringify(b).length > 40000
+    )
+      fail(400, "Auditoría inválida.");
+    const number = (v, integer = false) => {
+      if (v === null || v === undefined || v === "") return null;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        v < 0 ||
+        v > 1e12 ||
+        (integer && !Number.isSafeInteger(v))
+      )
+        fail(
+          400,
+          "Valores de auditoría deben ser números no negativos; importes en pesos enteros.",
+        );
+      return v;
+    };
+    if (b.tax_month && !validMonth(b.tax_month))
+      fail(400, "Mes fiscal inválido.");
+    const out = {
+      tax_month: clean(b.tax_month, 7),
+      tax_method: clean(b.tax_method, 30),
+      general_rate: number(b.general_rate),
+      bank_code: clean(b.bank_code, 9),
+      checks: Object.fromEntries(
+        Object.keys(CHECKS).map((k) => [k, b.checks?.[k] === true]),
+      ),
+      evidence: clean(b.evidence, 3000),
+      tax_source: clean(b.tax_source, 2000),
+      declaration_verified: b.declaration_verified === true,
+      monthly_payment_verified: b.monthly_payment_verified === true,
+      annual_exemption_opening: number(b.annual_exemption_opening, true),
+      annual_source: clean(b.annual_source, 2000),
+      iva_mode: clean(b.iva_mode, 30),
+      iva_source: clean(b.iva_source, 2000),
+      iva_rate: number(b.iva_rate),
+      reteiva_rate: number(b.reteiva_rate),
+      maintenance: number(b.maintenance, true) ?? 0,
+      other_discount: number(b.other_discount, true) ?? 0,
+      discount_source: clean(b.discount_source, 2000),
+      other_deductions: number(b.other_deductions, true) ?? 0,
+      deductions: {
+        dependents: b.deductions?.dependents === true,
+        housing_interest: number(b.deductions?.housing_interest, true) ?? 0,
+        prepaid_health: number(b.deductions?.prepaid_health, true) ?? 0,
+        verified: b.deductions?.verified === true,
+        source: clean(b.deductions?.source, 2000),
+      },
+    };
+    if (!Array.isArray(b.lines) || b.lines.length > 30)
+      fail(400, "Incluye la revisión de los renglones de servicio.");
+    out.lines = b.lines.map((l) => ({
+      glosa: number(l.glosa, true) ?? 0,
+      glosa_reason: clean(l.glosa_reason, 1000),
+      ica_mode: clean(l.ica_mode, 30),
+      ica_rate: number(l.ica_rate),
+      minimum_base: number(l.minimum_base, true),
+      minimum_scope: clean(l.minimum_scope, 30),
+      agent_verified: l.agent_verified === true,
+      activity: clean(l.activity, 1000),
+      ica_source: clean(l.ica_source, 2000),
+    }));
+    if (b.pila?.reference)
+      out.pila = {
+        reference: clean(b.pila.reference, 100),
+        period: clean(b.pila.period, 7),
+        verified: b.pila.verified === true,
+        paid: b.pila.paid === true,
+        arl_verified: b.pila.arl_verified === true,
+        ibc: number(b.pila.ibc, true),
+        health: number(b.pila.health, true),
+        pension: number(b.pila.pension, true),
+      };
+    return out;
   };
   const owns = (user, claim) => {
     if (!claim) fail(404, "Cuenta no encontrada.");
@@ -448,6 +608,263 @@ export function createApp(options = {}) {
             )
             .all(...(user.role === "admin" ? [] : [user.id]));
           return json(res, 200, { claims: ids.map((c) => claimDetail(c.id)) });
+        }
+        if (path === "/api/integration/events" && method === "GET") {
+          if (user.role !== "admin")
+            fail(403, "Integración reservada a administración.");
+          const after = Number(url.searchParams.get("after") || 0),
+            limit = Number(url.searchParams.get("limit") || 100);
+          if (
+            !Number.isSafeInteger(after) ||
+            after < 0 ||
+            !Number.isInteger(limit) ||
+            limit < 1 ||
+            limit > 500
+          )
+            fail(400, "Cursor o límite inválido.");
+          const events = db
+            .prepare(
+              "SELECT * FROM integration_events WHERE id>? ORDER BY id LIMIT ?",
+            )
+            .all(after, limit)
+            .map((e) => ({
+              cursor: e.id,
+              id: e.event_id,
+              module: "guia.ops",
+              schema_version: 1,
+              type: e.type,
+              entity_id: e.entity_id,
+              payload: JSON.parse(e.payload),
+              occurred_at: e.created,
+            }));
+          return json(res, 200, {
+            events,
+            next_cursor: events.at(-1)?.cursor || after,
+          });
+        }
+        if (
+          path.startsWith("/api/settlements") ||
+          path.startsWith("/api/lots") ||
+          path === "/api/bank-profiles" ||
+          /^\/api\/claims\/\d+\/audit$/.test(path)
+        ) {
+          if (user.role !== "admin")
+            fail(403, "Acceso reservado a contabilidad y tesorería.");
+          if (path === "/api/bank-profiles" && method === "GET")
+            return json(res, 200, {
+              profiles: BANK_PROFILES,
+              checks: CHECKS,
+              module: {
+                id: "guia.ops",
+                api_version: "v1",
+                integration: "docs/INTEGRACION_RCM.md",
+              },
+            });
+          const auditMatch = path.match(/^\/api\/claims\/(\d+)\/audit$/);
+          if (auditMatch && method === "PUT") {
+            owns(user, claimRow(Number(auditMatch[1])));
+            const c = claimDetail(Number(auditMatch[1]));
+            if (!["Radicada", "En revisión"].includes(c.status) || c.lot_id)
+              fail(
+                409,
+                "La auditoría solo puede editarse antes de aprobar o reservar para pago.",
+              );
+            const audit = reviewBody(await readBody(req));
+            if (
+              db
+                .prepare("SELECT id FROM lots WHERE period=?")
+                .get(audit.tax_month)
+            )
+              fail(
+                409,
+                "El mes fiscal ya está reservado en un lote. Requiere conciliación; no se agregan cuentas después del cierre.",
+              );
+            db.exec("BEGIN IMMEDIATE");
+            try {
+              db.prepare(
+                "INSERT INTO audits(claim_id,body,reviewer_id,reviewed_at) VALUES(?,?,?,?) ON CONFLICT(claim_id) DO UPDATE SET body=excluded.body,reviewer_id=excluded.reviewer_id,reviewed_at=excluded.reviewed_at",
+              ).run(
+                c.id,
+                JSON.stringify(audit),
+                user.id,
+                new Date().toISOString(),
+              );
+              emit("ops.audit.updated", c.id, {
+                claim_id: c.id,
+                tax_month: audit.tax_month,
+                reviewer_id: user.id,
+              });
+              db.exec("COMMIT");
+            } catch (e) {
+              db.exec("ROLLBACK");
+              throw e;
+            }
+            const updated = claimDetail(c.id);
+            return json(res, 200, {
+              claim: updated,
+              validation: auditClaim(updated, policy),
+            });
+          }
+          if (path === "/api/lots" && method === "GET")
+            return json(res, 200, { lots: lots().map(publicLot) });
+          if (
+            (path === "/api/settlements" && method === "GET") ||
+            (path === "/api/settlements/workbook" && method === "GET")
+          ) {
+            const period = url.searchParams.get("period");
+            if (!validMonth(period))
+              fail(400, "Selecciona el mes del pago o abono en cuenta.");
+            const prior = lots(),
+              existing = prior.find((l) => l.period === period),
+              accounts = allClaims();
+            const report =
+              existing?.report || settle(accounts, period, policy, prior);
+            if (path.endsWith("/workbook"))
+              return download(
+                res,
+                await paymentWorkbook(
+                  report,
+                  existing?.snapshot || accounts,
+                  existing,
+                ),
+                `GUIA-OPS-${period}${existing ? "-LOTE" : "-PREVIA"}.xlsx`,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              );
+            return json(res, 200, {
+              report,
+              lot: existing ? publicLot(existing) : null,
+            });
+          }
+          if (path === "/api/lots" && method === "POST") {
+            const b = await readBody(req);
+            if (!validMonth(b.period) || b.confirmed !== true)
+              fail(400, "Confirma el cierre mensual y sus cuentas revisadas.");
+            if (db.prepare("SELECT id FROM lots WHERE period=?").get(b.period))
+              fail(
+                409,
+                "El mes ya tiene un lote. Descarga el mismo archivo para evitar generar un segundo pago.",
+              );
+            const accounts = allClaims(),
+              prior = lots(),
+              report = settle(accounts, b.period, policy, prior);
+            if (!report.ready)
+              fail(
+                409,
+                "Resuelve los hallazgos de auditoría y liquidación de todas las personas del mes.",
+              );
+            const payer = b.payer || {};
+            if (payer.transmission_date !== today())
+              fail(400, "La fecha de transmisión debe ser hoy en Colombia.");
+            const file = bankFile(report, b.profile, payer);
+            const snapshot = accounts.filter((c) =>
+              report.rows.some((r) => r.claim_ids.includes(c.id)),
+            );
+            const id = `OPS-${b.period}-${randomBytes(4).toString("hex")}`,
+              created = new Date().toISOString();
+            const frozen = {
+              id,
+              period: b.period,
+              created,
+              profile: b.profile,
+              payer,
+              report,
+              snapshot,
+            };
+            const digest = createHash("sha256")
+              .update(JSON.stringify(frozen))
+              .update(file.text)
+              .digest("hex");
+            db.exec("BEGIN IMMEDIATE");
+            try {
+              db.prepare("INSERT INTO lots VALUES(?,?,?,?,?,?,?,?,?,?)").run(
+                id,
+                b.period,
+                created,
+                user.id,
+                b.profile,
+                JSON.stringify(payer),
+                JSON.stringify(report),
+                JSON.stringify(snapshot),
+                digest,
+                file.text,
+              );
+              // Unique claim IDs guarantee that the same account cannot be reserved twice.
+              for (const c of snapshot)
+                db.prepare("INSERT INTO lot_claims VALUES(?,?)").run(c.id, id);
+              emit("ops.payment_batch.prepared", id, {
+                lot_id: id,
+                tax_month: b.period,
+                claim_ids: snapshot.map((c) => c.id),
+                amount: report.totals.net,
+                snapshot_hash: digest,
+              });
+              db.exec("COMMIT");
+            } catch (e) {
+              db.exec("ROLLBACK");
+              throw e;
+            }
+            return json(res, 201, {
+              lot: publicLot({ ...frozen, hash: digest }),
+              report,
+            });
+          }
+          const lotMatch = path.match(
+            /^\/api\/lots\/([A-Za-z0-9-]+)\/(bank|package)$/,
+          );
+          if (lotMatch && method === "GET") {
+            const l = lots().find((x) => x.id === lotMatch[1]);
+            if (!l) fail(404, "Lote no encontrado.");
+            if (lotMatch[2] === "bank")
+              return download(
+                res,
+                l.bank_text,
+                `${l.id}-${l.profile}.txt`,
+                "text/plain; charset=us-ascii",
+              );
+            const zip = new JSZip();
+            zip.file(
+              "01-CUADRO-AUDITADO.xlsx",
+              await paymentWorkbook(l.report, l.snapshot, l),
+            );
+            zip.file(`02-${l.profile}.txt`, l.bank_text);
+            zip.file(
+              "03-DISPERSION-CONTROL.csv",
+              relationshipCsv(l.report.rows),
+            );
+            const groups = new Map();
+            for (const row of l.report.rows) {
+              if (!groups.has(row.bank.name)) groups.set(row.bank.name, []);
+              groups.get(row.bank.name).push(row);
+            }
+            let i = 0;
+            for (const [name, rows] of groups)
+              zip.file(
+                `BANCOS-DESTINO/${++i}-${name.replace(/[^\p{L}\p{N} ]/gu, "").slice(0, 50)}-RELACION.csv`,
+                relationshipCsv(rows),
+              );
+            zip.file(
+              "04-AUDITORIA.json",
+              JSON.stringify(
+                { module: "guia.ops", version: 1, ...l, bank_text: undefined },
+                null,
+                2,
+              ),
+            );
+            zip.file(
+              "LEEME.txt",
+              (demo ? "DEMOSTRACIÓN FICTICIA: verificaciones simuladas, sin soportes reales. NO CARGAR ESTOS ARCHIVOS AL BANCO.\n\n" : "") +
+                "Lote reservado para preparar pago; no confirma giro. El plano nativo corresponde al banco PAGADOR, incluye transferencias a otros bancos. Las relaciones por banco DESTINO son controles, no planos nativos. Transmitir una sola vez; verificar fecha, convenio, beneficiarios y resultado del banco. Datos y fórmulas son una fotografía del cierre. No se recalculan los lotes históricos.",
+            );
+            return download(
+              res,
+              await zip.generateAsync({
+                type: "nodebuffer",
+                compression: "DEFLATE",
+              }),
+              `${l.id}.zip`,
+              "application/zip",
+            );
+          }
         }
         const claimMatch = path.match(/^\/api\/claims\/(\d+)$/);
         if (claimMatch && method === "GET") {
@@ -717,6 +1134,7 @@ export function createApp(options = {}) {
                 id,
               );
               db.prepare("DELETE FROM documents WHERE claim_id=?").run(id);
+              db.prepare("DELETE FROM audits WHERE claim_id=?").run(id);
             } else {
               id = Number(
                 db
@@ -745,6 +1163,14 @@ export function createApp(options = {}) {
             documents.forEach((d) =>
               insert.run(id, d.kind, d.name, d.mime, d.bytes),
             );
+            emit(existing ? "ops.claim.corrected" : "ops.claim.submitted", id, {
+              claim_id: id,
+              contractor_id: user.id,
+              contract_id: c.id,
+              service_period: period,
+              gross: amount,
+              status: "Radicada",
+            });
             db.prepare(
               "INSERT INTO events(claim_id,user_id,status,note,created) VALUES(?,?,?,?,?)",
             ).run(
@@ -784,6 +1210,18 @@ export function createApp(options = {}) {
               400,
               "Confirma la revisión de documentos y consistencia antes de aprobar.",
             );
+          if (b.status === "Aprobada") {
+            const validation = auditClaim(claimDetail(c.id), policy);
+            if (validation.issues.length)
+              fail(
+                409,
+                "Completa la auditoría estructurada antes de aprobar: " +
+                  validation.issues
+                    .slice(0, 3)
+                    .map((x) => x.message)
+                    .join(" / "),
+              );
+          }
           if (b.status === "Devuelta" && clean(b.note, 2000).length < 10)
             fail(
               400,
@@ -797,6 +1235,12 @@ export function createApp(options = {}) {
               now,
               c.id,
             );
+            emit("ops.claim.status_changed", c.id, {
+              claim_id: c.id,
+              previous: c.status,
+              status: b.status,
+              reviewer_id: user.id,
+            });
             db.prepare(
               "INSERT INTO events(claim_id,user_id,status,note,created) VALUES(?,?,?,?,?)",
             ).run(
@@ -837,6 +1281,7 @@ export function createApp(options = {}) {
       const assets = {
         "/": "index.html",
         "/app.js": "app.js",
+        "/payments.js": "payments.js",
         "/styles.css": "styles.css",
         "/favicon.png": "favicon.png",
         "/logo-vivir.png": "logo-vivir.png",

@@ -2096,6 +2096,82 @@ dialog h3 {
   left: 0;
   top: 0;
 }
+/* Guía · OPS accounting and treasury */
+.payment-toolbar {
+  display: flex;
+  gap: 16px;
+  align-items: end;
+  padding: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.payment-toolbar label {
+  min-width: 230px;
+}
+.audit-findings {
+  padding: 0 24px 24px;
+}
+.audit-findings > div {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 0;
+  border-top: 1px solid var(--border, #dde5df);
+}
+.audit-findings p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.audit-summary {
+  padding: 18px;
+  background: #f0f6f3;
+  border-radius: 12px;
+  margin: 20px 0;
+}
+.audit-lines fieldset {
+  padding: 18px;
+  margin: 16px 0;
+  border: 1px solid #dce5df;
+  border-radius: 12px;
+}
+.audit-lines legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+.bank-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+  padding: 0 24px 24px;
+}
+.bank-profile-grid > div {
+  border: 1px solid #dce5df;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 10px;
+}
+.bank-profile-grid small {
+  color: #63756c;
+  line-height: 1.5;
+}
+@media (max-width: 600px) {
+  .audit-findings > div {
+    flex-wrap: wrap;
+  }
+  .audit-findings p {
+    flex-basis: 100%;
+  }
+  .payment-toolbar .btn {
+    width: 100%;
+  }
+  .audit-lines fieldset {
+    padding: 12px;
+  }
+}
 
 /* Profundidad y contraste: superficies blancas elevadas sobre fondo azul claro,
    sombras en capas con tinte azul y una sola acción principal destacada por pantalla. */
@@ -2192,4 +2268,9 @@ textarea {
 .workspace-label,
 .next-card > .eyebrow {
   color: #9fc3dd;
+}
+
+.payment-stats .stat-card > strong {
+  font-size: clamp(22px, 2.1vw, 30px);
+  letter-spacing: -0.7px;
 }

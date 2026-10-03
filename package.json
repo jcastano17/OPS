@@ -10,6 +10,16 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "demo": "DEMO_MODE=1 node server.js",
+    "demo:finance": "DEMO_MODE=1 node scripts/demo-finance.js",
     "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.1"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    }
   }
 }

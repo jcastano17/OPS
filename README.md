@@ -1,12 +1,13 @@
-# VIVIR · Portal de cuentas OPS
+# Guía · Módulo OPS para VIVIR
 
-Primera versión local para que cada contratista radique cuentas de cobro o facturas y el equipo de VIVIR revise soportes, registre observaciones y apruebe cuentas. Incluye un modo de demostración con datos ficticios.
+Módulo de Guía para radicación, auditoría, liquidación mensual y preparación de pagos OPS de VIVIR, con API y eventos para integración con RCM. Incluye una demostración local con datos ficticios. La conexión real al RCM requiere revisar su proyecto y contrato de integración.
 
 ## Iniciar
 
-Requiere **Node.js 24 o posterior**. No necesita instalar paquetes externos.
+Requiere **Node.js 24 o posterior**. Instala las dependencias fijadas en `package-lock.json`.
 
 ```sh
+npm ci
 npm run demo
 ```
 
@@ -22,6 +23,8 @@ npm start
 
 Las credenciales iniciales de administración se usan solo al crear la base. Administración crea los accesos de los contratistas y sus contratos desde la interfaz. La app escucha únicamente en localhost por defecto.
 
+Para probar la liquidación y el paquete bancario, inicia `npm run demo:finance` en lugar de `npm run demo`. Utiliza una base separada en `data/demo-finance/` con tres cuentas ficticias, dos contratistas y dos bancos destino. Las auditorías están simuladas y no certifican documentos reales. Todo archivo de esta demostración es para pruebas y no debe cargarse al banco.
+
 ## Funciones
 
 - Acceso por contraseña, perfiles de contratista y administración. Cada contratista solo ve sus propios contratos, cuentas y documentos.
@@ -35,6 +38,12 @@ Las credenciales iniciales de administración se usan solo al crear la base. Adm
 - Motivos de devolución tomados del instructivo y confirmación de revisión documental antes de aprobar.
 - Búsqueda por radicado, contrato, contratista, municipio, programa o entidad; filtros de estado y exportación CSV del resultado filtrado.
 - Interfaz adaptable a escritorio y celular.
+- Auditoría estructurada por soporte, revisor, fecha y evidencia; renta, IVA, banco, glosas y tratamiento ICA por municipio/actividad.
+- Consolidación por persona y mes fiscal, separado del periodo del servicio; tabla 383 y control de exención anual, aportes reales sin duplicar PILA, deducciones comunes con sus límites y tarifa general sustentada.
+- Neto con glosas adicionales, IVA, retefuente, ICA, reteIVA, mantenimiento y descuentos contractuales; pendientes impiden preparar el pago.
+- Cuadro Excel con fórmulas y valores del cierre, servicios, soportes, auditoría, pendientes, parámetros y relaciones por banco destino.
+- Lote mensual reservado una sola vez, copia inmutable y SHA256; paquete ZIP con cuadro, plano PAB/SAP, relaciones por banco y auditoría JSON.
+- Eventos de integración consultables y persistentes para Guía/RCM. Detalles en [docs/INTEGRACION_RCM.md](docs/INTEGRACION_RCM.md).
 
 **Aprobada** significa revisión administrativa completada. La app no realiza ni acredita pagos.
 
@@ -69,16 +78,19 @@ Las contraseñas se guardan con scrypt y sal única. Las sesiones duran ocho hor
 npm test
 ```
 
-Las pruebas de integración usan datos ficticios y una base temporal. Cubren autenticación, origen, permisos, soporte obligatorio y condicional, tipos de archivo, juramento, factura, aritmética, posibles duplicados, varias cuentas por mes, aislamiento de documentos, revisión, corrección, aprobación, cierre de sesión y persistencia tras reiniciar.
+Las pruebas usan datos ficticios y bases temporales. Cubren el flujo y permisos, límites de los siete tramos 383, control anual, glosas y descuentos, deducciones, consolidación de ICA y PILA, formatos bancarios y ceros iniciales, fórmulas Excel, cierre único, ZIP, eventos para RCM y persistencia de lotes tras reiniciar.
 
 ## Pendiente para operación real
 
-- Contabilidad debe definir retenciones, ICA y glosas: las fuentes históricas presentan discrepancias. Esta versión registra el valor bruto, sin liquidar el neto a pagar ni generar dispersión bancaria.
+- Completar la matriz tributaria municipal/actividad con las normas y situaciones reales de VIVIR. ICA no se excluye ni se retiene universalmente por ser IPS. El tratamiento debe sustentarse por operación; se documenta en [docs/CRITERIOS_LIQUIDACION.md](docs/CRITERIOS_LIQUIDACION.md).
+- Validar el convenio bancario y aceptación de PAB/SAP con el banco pagador. Otros bancos tienen relaciones por destino y perfiles pendientes de especificación del canal; aún no todos tienen plano nativo implementado.
+- Conexión al RCM real, SSO y maestros corporativos, conciliación de respuestas bancarias y separación de permisos por rol. No se ha establecido la conexión solo por ofrecer API/eventos.
+- AFC/pensión voluntaria, pagos acumulados o mensualización especial y otros tratamientos fiscales particulares requieren ampliar el motor; no se liquidan como cero.
 - Ratificar el flujo de aprobación y roles de jefe, auditoría, contabilidad y tesorería. Los cuatro estados actuales son una propuesta de primera versión.
 - Calendario de días hábiles, marca de entrega tardía y fecha efectiva de radicación corregida. No se calculan plazos ni fechas de pago todavía.
 - Revisión de contenido: firma, página única, CUFE, casilla 61 del RUT, fecha de la declaración, PILA pagada/IBC/periodo, cantidades de bitácoras y glosas son verificaciones del revisor. La app comprueba presencia y encabezados de archivos, no autenticidad ni contenido.
 - Catálogos oficiales DIVIPOLA y entidad-servicio; hoy se capturan los datos como texto.
-- Retención de versiones anteriores de documentos y exportaciones con la estructura completa de las planillas de Contabilidad.
+- Retención de versiones anteriores de documentos y ajuste del cuadro al formato de Contabilidad definitivo. Los snapshots de lotes sí preservan sus datos y cálculos originales.
 - Hosting HTTPS, respaldos y retención, recuperación/cambio de contraseñas y controles operativos para acceso de usuarios reales.
 
 No hay despliegue público, correos ni procesamiento de pagos en esta versión.
