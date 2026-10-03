@@ -1,3 +1,4 @@
+import {createReconciliationUI} from "./reconciliation.js";
 export function createPaymentUI({
   state,
   $,
@@ -14,6 +15,7 @@ export function createPaymentUI({
   formError,
   showDetail,
 }) {
+  const {reconciliationPanel,reconciliationDialog} = createReconciliationUI({state,$,esc,currency,icon,api,dialog,closeOverlay,toast,formError,loadPayments,refresh});
   function paymentsPage() {
     const r = state.paymentReport,
       lot = state.paymentLot;
@@ -28,6 +30,7 @@ export function createPaymentUI({
   ${r.issues.length ? `<section class="panel"><div class="panel-heading"><div><h2>Hallazgos y pendientes</h2><p>Las cuentas pendientes impiden cerrar el lote. Abre el radicado para completar su auditoría.</p></div></div><div class="audit-findings">${r.issues.map((x) => `<div><span class="badge amber">${esc(x.code)}</span><p><strong>${esc(x.name)}</strong> · ${esc(x.message)}</p>${x.claim_id ? `<button class="btn secondary compact" data-detail="${x.claim_id}">Abrir cuenta</button>` : ""}</div>`).join("")}</div></section>` : ""}`
       : `<section class="panel empty-state"><span>${icon("wallet")}</span><h3>Prepara una liquidación mensual</h3><p>Primero completa la auditoría estructurada de las cuentas. Puedes descargar el cuadro con los pendientes para revisarlos.</p></section>`
   }
+  ${lot ? reconciliationPanel() : ""}
   <section class="panel"><div class="panel-heading"><div><h2>Formatos bancarios</h2><p>El plano depende del banco desde el que VIVIR paga. Puede incluir beneficiarios de otros bancos. El Excel y el ZIP también separan las relaciones por banco destino.</p></div></div><div class="bank-profile-grid">${state.bankProfiles.map((p) => `<div><strong>${esc(p.bank)} · ${esc(p.format)}</strong><span class="badge ${p.enabled ? "green" : "amber"}">${p.enabled ? "Estructura implementada" : "Convenio por validar"}</span>${p.source ? `<a href="${esc(p.source)}" target="_blank" rel="noopener">Especificación oficial</a>` : `<small>${esc(p.reason)}</small>`}</div>`).join("")}</div></section>`;
   }
   async function loadPayments() {
@@ -38,6 +41,7 @@ export function createPaymentUI({
       ]);
       state.paymentReport = r.report;
       state.paymentLot = r.lot;
+      state.paymentReconciliation = r.lot ? await api(`/lots/${r.lot.id}/reconciliation`) : null;
       state.bankProfiles = p.profiles;
       state.auditChecks = p.checks;
       render();
@@ -228,5 +232,5 @@ export function createPaymentUI({
       }
     };
   }
-  return { paymentsPage, loadPayments, closeLotDialog, showAudit };
+  return { paymentsPage, loadPayments, closeLotDialog, showAudit, reconciliationDialog };
 }

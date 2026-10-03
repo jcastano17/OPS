@@ -23,6 +23,8 @@ El módulo pertenece a **Guía** y debe participar en el RCM completo. Esta sepa
 | Perfiles de dispersión | `GET /api/bank-profiles` | Administración |
 | Reserva mensual | `POST /api/lots` | Administración; datos del pagador verificados |
 | Paquete y plano reservado | `GET /api/lots/:id/package`, `/bank` | Administración |
+| Resultado bancario y soportes | `GET /api/lots/:id/reconciliation`, `/template`, `/imports/:id/source` | Administración |
+| Vista previa y registro del resultado | `POST /api/lots/:id/reconciliation/preview`, `POST /api/lots/:id/reconciliation` | Administración; revisión del soporte original requerida |
 | Eventos incrementales | `GET /api/integration/events?after=0&limit=100` | Sesión administrativa autenticada; límite 1–500 |
 
 Las rutas actuales tienen contrato de prototipo. El esquema de eventos tiene `schema_version: 1` y `module: guia.ops`. Al incorporar OPS a la API nativa de Guía se fijará su contrato versionado; las rutas y la autenticación del prototipo no se reutilizan como si ya fueran nativas.
@@ -46,7 +48,9 @@ Las rutas actuales tienen contrato de prototipo. El esquema de eventos tiene `sc
 }
 ```
 
-Eventos emitidos: `ops.claim.submitted`, `ops.claim.corrected`, `ops.audit.updated`, `ops.claim.status_changed`, `ops.payment_batch.prepared`. El consumidor guarda `next_cursor` después de procesar y deduplica por `id`; una repetición de consulta no debe contabilizar dos veces. No hay envío externo automático ni webhooks pendientes en memoria. La API de eventos no incluye pacientes ni bitácoras clínicas.
+Eventos emitidos: `ops.claim.submitted`, `ops.claim.corrected`, `ops.audit.updated`, `ops.claim.status_changed`, `ops.payment_batch.prepared`, `ops.payment.result_recorded`. El consumidor guarda `next_cursor` después de procesar y deduplica por `id`; una repetición de consulta no debe contabilizar dos veces. No hay envío externo automático ni webhooks pendientes en memoria. La API de eventos no incluye pacientes ni bitácoras clínicas.
+
+El evento de resultado identifica lote, documento del beneficiario, cuentas consolidadas, valor, estado anterior/nuevo, referencia y fecha bancaria, importación, revisor y huellas del soporte y cierre. Solo `PAGADO` representa pago efectivo confirmado por el revisor; `ACEPTADO` sigue pendiente y `RECHAZADO` exige revisión. Se genera en la misma transacción que el registro y su soporte. Los consumidores no deben tratar cada cambio de estado como un nuevo giro, ni sumar el neto de la persona por cada cuenta que integra su consolidado.
 
 ## Conexiones necesarias del módulo con RCM
 
@@ -62,7 +66,7 @@ Eventos emitidos: `ops.claim.submitted`, `ops.claim.corrected`, `ops.audit.updat
 | Conciliación | Pago aceptado/rechazado/efectivo, comprobante e idempotencia por movimiento. Un archivo generado no significa pago. |
 | RCM gerencial | Costos OPS por servicio/programa/sede y margen, sin confundir costos aprobados, causados y pagados. |
 
-Pendiente de conexión real: implementación del módulo en Guía, identidad compartida, identificadores, permisos y prueba conjunta. El adaptador de respuesta bancaria y su conciliación todavía no están implementados. Los pagos parciales, reapertura y ajustes de cierres requieren un flujo de reversión contable; esta versión reserva un mes completo una vez y bloquea modificaciones posteriores.
+Pendiente de conexión real: implementación del módulo en Guía, identidad compartida, identificadores, permisos y prueba conjunta. La conciliación del prototipo acepta un CSV normalizado con revisión manual y soporte bancario original; los adaptadores de formatos de respuesta propios de cada convenio todavía no están implementados. Los pagos parciales por beneficiario, reintentos tras rechazo, reapertura y ajustes de cierres requieren un flujo de reversión contable; esta versión reserva un mes completo una vez y bloquea modificaciones posteriores.
 
 ## Revisión del sistema Guía existente
 

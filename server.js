@@ -13,6 +13,7 @@ import JSZip from "jszip";
 import { auditClaim, settle, validMonth, CHECKS } from "./lib/liquidation.js";
 import { bankFile, BANK_PROFILES, relationshipCsv } from "./lib/banks.js";
 import { paymentWorkbook } from "./lib/workbook.js";
+import { parseResults, planResults, resultsTemplate, summarizeResults } from "./lib/reconciliation.js";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const STATES = ["Radicada", "En revisión", "Devuelta", "Aprobada"];
@@ -89,6 +90,8 @@ export function createApp(options = {}) {
     CREATE TABLE IF NOT EXISTS lots(id TEXT PRIMARY KEY, period TEXT UNIQUE NOT NULL, created TEXT NOT NULL, creator_id INTEGER NOT NULL REFERENCES users(id), profile TEXT NOT NULL, payer TEXT NOT NULL, report TEXT NOT NULL, snapshot TEXT NOT NULL, hash TEXT NOT NULL, bank_text TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS lot_claims(claim_id INTEGER PRIMARY KEY REFERENCES claims(id), lot_id TEXT NOT NULL REFERENCES lots(id));
     CREATE TABLE IF NOT EXISTS integration_events(id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT UNIQUE NOT NULL, type TEXT NOT NULL, entity_id TEXT NOT NULL, payload TEXT NOT NULL, created TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS payment_imports(id TEXT PRIMARY KEY, lot_id TEXT NOT NULL REFERENCES lots(id), content_hash TEXT NOT NULL, source_hash TEXT NOT NULL, source_name TEXT NOT NULL, source_mime TEXT NOT NULL, source_bytes BLOB NOT NULL, reviewer_id INTEGER NOT NULL REFERENCES users(id), created TEXT NOT NULL, UNIQUE(lot_id,content_hash));
+    CREATE TABLE IF NOT EXISTS payment_results(id INTEGER PRIMARY KEY AUTOINCREMENT, import_id TEXT NOT NULL REFERENCES payment_imports(id), lot_id TEXT NOT NULL REFERENCES lots(id), profile TEXT NOT NULL, document TEXT NOT NULL, amount INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('ACEPTADO','PAGADO','RECHAZADO')), reference TEXT NOT NULL, date TEXT NOT NULL, detail TEXT NOT NULL, UNIQUE(profile,reference,state));
   `);
   // Preserve data from the first local prototype when allowing multiple accounts per month.
   if (
@@ -216,6 +219,10 @@ export function createApp(options = {}) {
       lot_id:
         db.prepare("SELECT lot_id FROM lot_claims WHERE claim_id=?").get(id)
           ?.lot_id || null,
+      payment: (() => {
+        const result = db.prepare("SELECT r.state,r.reference,r.date,r.detail,r.amount FROM payment_results r JOIN lot_claims lc ON lc.lot_id=r.lot_id WHERE lc.claim_id=? AND r.document=? ORDER BY r.id DESC LIMIT 1").get(id, row.contractor_document);
+        return result ? { ...result, scope: "Consolidado de la persona en el lote" } : null;
+      })(),
       documents: db
         .prepare(
           "SELECT id,kind,name,mime,length(bytes) AS size FROM documents WHERE claim_id=? ORDER BY id",
@@ -255,6 +262,9 @@ export function createApp(options = {}) {
         report: JSON.parse(l.report),
         snapshot: JSON.parse(l.snapshot),
       }));
+  const reconciliation = (l) => summarizeResults(l,
+    db.prepare("SELECT * FROM payment_results WHERE lot_id=? ORDER BY id").all(l.id),
+    db.prepare("SELECT count(*) AS n FROM payment_imports WHERE lot_id=?").get(l.id).n);
   const publicLot = (l) => ({
     id: l.id,
     period: l.period,
@@ -263,8 +273,33 @@ export function createApp(options = {}) {
     hash: l.hash,
     total: l.report.totals.net,
     count: l.report.rows.length,
-    state: "Preparado para pago",
+    state: reconciliation(l).state,
   });
+  const reconciliationPlan = (l, csv) => {
+    const report = reconciliation(l);
+    const plan = planResults(l, parseResults(csv), report.rows.filter((x) => x.state !== "PENDIENTE"), today());
+    const references = new Set();
+    for (const r of plan.records) {
+      if (references.has(r.reference)) plan.issues.push({document:r.document,message:"La referencia del movimiento está repetida para dos beneficiarios."});
+      references.add(r.reference);
+      const prior = db.prepare("SELECT lot_id,document,amount FROM payment_results WHERE profile=? AND reference=? LIMIT 1").get(BANK_PROFILES.find((p) => p.id === l.profile).bank, r.reference);
+      if (prior && (prior.lot_id !== l.id || prior.document !== r.document || prior.amount !== r.amount))
+        plan.issues.push({document:r.document,message:"La referencia bancaria ya corresponde a otro pago registrado."});
+    }
+    return { ...plan, ready: plan.issues.length === 0, version: report.version, snapshot_hash: l.hash };
+  };
+  const importsFor = (id) => db.prepare("SELECT p.id,p.source_name,p.source_hash,p.created,u.name AS reviewer FROM payment_imports p JOIN users u ON u.id=p.reviewer_id WHERE p.lot_id=? ORDER BY p.created,p.id").all(id);
+  const paymentSource = (source) => {
+    if (!source || typeof source.content !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(source.content) || source.content.length > 12_000_000)
+      fail(400, "Adjunta el resultado original del banco como PDF o CSV, hasta 8 MB.");
+    const bytes = Buffer.from(source.content, "base64");
+    if (!bytes.length || bytes.length > 8 * 1024 * 1024) fail(400, "El soporte bancario debe pesar entre 1 byte y 8 MB.");
+    const name = clean(source.name, 120).replace(/[\x00-\x1f\/\\]/g, "_");
+    const pdf = name.toLowerCase().endsWith(".pdf") && bytes.subarray(0,5).toString() === "%PDF-";
+    const csv = name.toLowerCase().endsWith(".csv") && !bytes.includes(0) && Buffer.from(bytes.toString("utf8")).equals(bytes);
+    if (!pdf && !csv) fail(400, "El soporte debe ser un PDF o CSV UTF-8 auténtico.");
+    return { bytes, name, mime: pdf ? "application/pdf" : "text/csv; charset=utf-8", hash: createHash("sha256").update(bytes).digest("hex") };
+  };
   const download = (res, bytes, name, type) => {
     res.writeHead(200, {
       "Content-Type": type,
@@ -707,6 +742,56 @@ export function createApp(options = {}) {
           }
           if (path === "/api/lots" && method === "GET")
             return json(res, 200, { lots: lots().map(publicLot) });
+          const reconciliationMatch = path.match(/^\/api\/lots\/([A-Za-z0-9-]+)\/reconciliation(?:\/(preview|template|imports\/([a-f0-9-]+)\/source))?$/);
+          if (reconciliationMatch) {
+            const l = lots().find((x) => x.id === reconciliationMatch[1]);
+            if (!l) fail(404, "Lote no encontrado.");
+            const action = reconciliationMatch[2];
+            if (!action && method === "GET") return json(res, 200, { report: reconciliation(l), imports: importsFor(l.id) });
+            if (action === "template" && method === "GET") return download(res, resultsTemplate(l), `${l.id}-CONCILIACION.csv`, "text/csv; charset=utf-8");
+            if (action?.startsWith("imports/") && method === "GET") {
+              const source = db.prepare("SELECT * FROM payment_imports WHERE id=? AND lot_id=?").get(reconciliationMatch[3], l.id);
+              if (!source) fail(404, "Soporte bancario no encontrado.");
+              res.writeHead(200, {"Content-Type":source.source_mime,"Content-Disposition":`attachment; filename*=UTF-8''${encodeURIComponent(source.source_name)}`,"Cache-Control":"no-store"});
+              return res.end(Buffer.from(source.source_bytes));
+            }
+            if (method === "POST" && (!action || action === "preview")) {
+              const b = await readBody(req);
+              if (!b || typeof b !== "object" || Array.isArray(b)) fail(400, "Solicitud de conciliación inválida.");
+              if (action === "preview") return json(res, 200, { plan: reconciliationPlan(l, b.csv) });
+              if (b.confirmed !== true || !Number.isSafeInteger(b.expected_version) || b.expected_version < 0 || typeof b.import_id !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(b.import_id))
+                fail(400, "Revisa la vista previa y confirma el resultado contrastado con el banco.");
+              const source = paymentSource(b.source);
+              // Stable ordering gives identical retries the same fingerprint without storing duplicate results.
+              const records = parseResults(b.csv);
+              const canonical = planResults(l, records, [], today()).records.sort((a, b) => a.document.localeCompare(b.document));
+              const contentHash = createHash("sha256").update(JSON.stringify({records:canonical,source_hash:source.hash})).digest("hex");
+              db.exec("BEGIN IMMEDIATE");
+              try {
+                const previous = db.prepare("SELECT id,lot_id,content_hash FROM payment_imports WHERE id=? OR (lot_id=? AND content_hash=?) ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END LIMIT 1").get(b.import_id, l.id, contentHash, b.import_id);
+                if (previous) {
+                  if (previous.lot_id !== l.id || previous.content_hash !== contentHash) fail(409, "Esta clave de importación ya se usó con otro resultado.");
+                  db.exec("COMMIT");
+                  return json(res, 200, { report: reconciliation(l), imports: importsFor(l.id), replayed: true });
+                }
+                const plan = reconciliationPlan(l, b.csv);
+                if (plan.version !== b.expected_version) fail(409, "Otro usuario registró resultados. Recarga la conciliación y revisa una nueva vista previa.");
+                if (!plan.ready) fail(409, plan.issues.map((x) => `${x.document}: ${x.message}`).join(" "));
+                if (!plan.changes.length) {
+                  db.exec("COMMIT");
+                  return json(res, 200, { report: reconciliation(l), imports: importsFor(l.id), replayed: true });
+                }
+                const created = new Date().toISOString();
+                db.prepare("INSERT INTO payment_imports VALUES(?,?,?,?,?,?,?,?,?)").run(b.import_id,l.id,contentHash,source.hash,source.name,source.mime,source.bytes,user.id,created);
+                for (const r of plan.changes) {
+                  db.prepare("INSERT INTO payment_results(import_id,lot_id,profile,document,amount,state,reference,date,detail) VALUES(?,?,?,?,?,?,?,?,?)").run(b.import_id,l.id,BANK_PROFILES.find((p) => p.id === l.profile).bank,r.document,r.amount,r.state,r.reference,r.date,r.detail);
+                  emit("ops.payment.result_recorded", l.id, { lot_id:l.id,document:r.document,claim_ids:r.claim_ids,amount:r.amount,state:r.state,previous_state:r.previous_state,reference:r.reference,date:r.date,import_id:b.import_id,source_hash:source.hash,snapshot_hash:l.hash,reviewer_id:user.id });
+                }
+                db.exec("COMMIT");
+                return json(res, 201, { report: reconciliation(l), imports: importsFor(l.id), replayed: false });
+              } catch (e) { db.exec("ROLLBACK"); throw e; }
+            }
+          }
           if (
             (path === "/api/settlements" && method === "GET") ||
             (path === "/api/settlements/workbook" && method === "GET")
@@ -850,6 +935,8 @@ export function createApp(options = {}) {
                 2,
               ),
             );
+            zip.file("05-PLANTILLA-CONCILIACION.csv", resultsTemplate(l));
+            zip.file("06-ESTADO-CONCILIACION.json", JSON.stringify({ module:"guia.ops",version:1,as_of:new Date().toISOString(),report:reconciliation(l),imports:importsFor(l.id) }, null, 2));
             zip.file(
               "LEEME.txt",
               (demo ? "DEMOSTRACIÓN FICTICIA: verificaciones simuladas, sin soportes reales. NO CARGAR ESTOS ARCHIVOS AL BANCO.\n\n" : "") +
@@ -1282,6 +1369,7 @@ export function createApp(options = {}) {
         "/": "index.html",
         "/app.js": "app.js",
         "/payments.js": "payments.js",
+        "/reconciliation.js": "reconciliation.js",
         "/styles.css": "styles.css",
         "/favicon.png": "favicon.png",
         "/logo-vivir.png": "logo-vivir.png",

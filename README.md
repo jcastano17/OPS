@@ -43,9 +43,10 @@ Para probar la liquidación y el paquete bancario, inicia `npm run demo:finance`
 - Neto con glosas adicionales, IVA, retefuente, ICA, reteIVA, mantenimiento y descuentos contractuales; pendientes impiden preparar el pago.
 - Cuadro Excel con fórmulas y valores del cierre, servicios, soportes, auditoría, pendientes, parámetros y relaciones por banco destino.
 - Lote mensual reservado una sola vez, copia inmutable y SHA256; paquete ZIP con cuadro, plano PAB/SAP, relaciones por banco y auditoría JSON.
+- Conciliación por beneficiario: plantilla CSV, vista previa, soporte original del banco, resultados aceptados/pagados/rechazados e importaciones idempotentes. Consulta [docs/CONCILIACION.md](docs/CONCILIACION.md).
 - Eventos de integración consultables y persistentes para Guía/RCM. Detalles en [docs/INTEGRACION_RCM.md](docs/INTEGRACION_RCM.md).
 
-**Aprobada** significa revisión administrativa completada. La app no realiza ni acredita pagos.
+**Aprobada** significa revisión administrativa completada. **PAGADO** en la conciliación es un registro manual del resultado efectivo contrastado por el revisor; la app no realiza transferencias ni verifica directamente con el banco.
 
 ## Requisitos y fuentes
 
@@ -80,13 +81,13 @@ Las contraseñas se guardan con scrypt y sal única. Las sesiones duran ocho hor
 npm test
 ```
 
-Las pruebas usan datos ficticios y bases temporales. Cubren el flujo y permisos, límites de los siete tramos 383, control anual, glosas y descuentos, deducciones, consolidación de ICA y PILA, formatos bancarios y ceros iniciales, fórmulas Excel, cierre único, ZIP, eventos para RCM y persistencia de lotes tras reiniciar.
+Las pruebas usan datos ficticios y bases temporales. Cubren el flujo y permisos, límites de los siete tramos 383, control anual, glosas y descuentos, deducciones, consolidación de ICA y PILA, formatos bancarios y ceros iniciales, fórmulas Excel, cierre único, ZIP, eventos para RCM, importación bancaria con evidencia, reintentos sin duplicados, estados de pago, vista previa sin escrituras y persistencia de lotes y conciliación tras reiniciar.
 
 ## Pendiente para operación real
 
 - Completar la matriz tributaria municipal/actividad con las normas y situaciones reales de VIVIR. ICA no se excluye ni se retiene universalmente por ser IPS. El tratamiento debe sustentarse por operación; se documenta en [docs/CRITERIOS_LIQUIDACION.md](docs/CRITERIOS_LIQUIDACION.md).
 - Validar el convenio bancario y aceptación de PAB/SAP con el banco pagador. Otros bancos tienen relaciones por destino y perfiles pendientes de especificación del canal; aún no todos tienen plano nativo implementado.
-- Conexión al RCM real, SSO y maestros corporativos, conciliación de respuestas bancarias y separación de permisos por rol. No se ha establecido la conexión solo por ofrecer API/eventos.
+- Conexión al RCM real, SSO y maestros corporativos, lectores de respuesta propios de cada banco, reversión/reintentos de giros y separación de permisos por rol. No se ha establecido la conexión solo por ofrecer API/eventos.
 - AFC/pensión voluntaria, pagos acumulados o mensualización especial y otros tratamientos fiscales particulares requieren ampliar el motor; no se liquidan como cero.
 - Ratificar el flujo de aprobación y roles de jefe, auditoría, contabilidad y tesorería. Los cuatro estados actuales son una propuesta de primera versión.
 - Calendario de días hábiles, marca de entrega tardía y fecha efectiva de radicación corregida. No se calculan plazos ni fechas de pago todavía.

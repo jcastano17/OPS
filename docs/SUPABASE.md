@@ -14,7 +14,7 @@ Supabase aloja PostgreSQL y es compatible con la persistencia de Guía. Debe usa
 
 ## Configuración preparada y pendiente
 
-`integrations/supabase/guia.env.example` contiene el host y método confirmados, sin secretos. Se copia a `.env.supabase`, excluido de Git, para completar localmente la contraseña existente, codificada como parte de una URL. `probe.py` comprueba exclusivamente la conexión y metadatos en una transacción de lectura; se ejecuta con el entorno Python de Guía. No migra ni cambia la aplicación.
+`integrations/supabase/guia.env.example` contiene el host y método confirmados, sin secretos. Se copia a `.env.supabase`, excluido de Git, para completar localmente `SUPABASE_DATABASE_PASSWORD` con la contraseña existente, sin agregar comillas. El driver la recibe como parámetro separado, admitiendo símbolos sin codificar la URL. `probe.py` comprueba exclusivamente la conexión y metadatos en una transacción de lectura; se ejecuta con el entorno Python de Guía. No migra ni cambia la aplicación.
 
 Para operar faltan: credencial privada de conexión; bootstrap de roles propios de Guía y adaptación de su arranque al PostgreSQL administrado (no crear otra base como hace su script local); migraciones del sistema y del dominio OPS; integración nativa de OPS con contexto, permisos y transacciones; y pruebas de aislamiento y del recorrido completo. `GUIA_DATABASE_URL` debe usar un rol de aplicación sujeto a RLS, separado del rol de migración. No se configurará la aplicación con `postgres`, ni se publicarán claves privilegiadas en el frontend.
 

@@ -74,6 +74,7 @@ const state = {
   paymentMonth: monthNow(),
   paymentReport: null,
   paymentLot: null,
+  paymentReconciliation: null,
   bankProfiles: [],
   auditChecks: {},
 };
@@ -423,9 +424,11 @@ function bindContent() {
     state.paymentMonth = e.target.value;
     state.paymentReport = null;
     state.paymentLot = null;
+    state.paymentReconciliation = null;
     render();
   });
   $("#close-lot")?.addEventListener("click", closeLotDialog);
+  $("#reconcile-lot")?.addEventListener("click", reconciliationDialog);
 }
 function exportCsv() {
   const cell = (v) =>
@@ -483,6 +486,7 @@ function showDetail(id) {
     const section = document.createElement("section");
     section.className = "audit-summary";
     section.innerHTML = `<h3>Auditoría y liquidación</h3><p>${c.audit ? `Revisión guardada por ${esc(c.audit.reviewer)} · Mes fiscal ${esc(c.audit.tax_month || "pendiente")} · Renta ${esc(c.audit.tax_method || "pendiente")}` : "Pendiente de auditoría estructurada. La aprobación requiere verificar documentos y tratamiento tributario."}${c.lot_id ? ` · Lote ${esc(c.lot_id)}` : ""}</p>${["Radicada", "En revisión"].includes(c.status) ? '<button type="button" class="btn secondary" id="audit-account">' + icon("shield") + " Auditar y liquidar</button>" : ""}`;
+    if (c.payment) section.insertAdjacentHTML("beforeend", `<h3>Resultado bancario</h3><p><strong>${esc({PAGADO:"Pago confirmado",ACEPTADO:"Aceptado, por confirmar",RECHAZADO:"Rechazado"}[c.payment.state])}</strong> · ${currency(c.payment.amount)} · ${esc(c.payment.scope)}</p><p>Referencia ${esc(c.payment.reference)} · ${esc(c.payment.date)} · ${esc(c.payment.detail)}</p>`);
     $("#overlay dialog").querySelector(".document-list").before(section);
     $("#audit-account")?.addEventListener("click", () =>
       showAudit(c).catch((e) => toast(e.message, true)),
@@ -819,7 +823,7 @@ async function init() {
     renderLogin();
   }
 }
-const { paymentsPage, loadPayments, closeLotDialog, showAudit } =
+const { paymentsPage, loadPayments, closeLotDialog, showAudit, reconciliationDialog } =
   createPaymentUI({
     state,
     $,

@@ -2274,3 +2274,15 @@ textarea {
   font-size: clamp(22px, 2.1vw, 30px);
   letter-spacing: -0.7px;
 }
+.reconciliation-totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding: 0 28px 24px; }
+.reconciliation-totals div { background: #f3f7f8; border-radius: 10px; padding: 18px; }
+.reconciliation-totals small, .reconciliation-totals strong { display: block; }
+.reconciliation-totals strong { font-size: 21px; margin-top: 8px; }
+.reconciliation-footer { display: flex; align-items: center; gap: 20px; padding: 24px 28px; }
+.reconciliation-footer p { margin: 0; color: var(--muted); font-size: 14px; }
+.reconciliation-evidence { padding: 0 28px 24px; overflow-wrap: anywhere; }
+.reconciliation-evidence a { color: #0d5c91; }
+#reconciliation-form { margin-top: 24px; }
+#reconciliation-preview { margin-top: 24px; }
+@media (max-width: 900px) { .reconciliation-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .reconciliation-panel .panel-heading { display: block; } .reconciliation-panel .panel-heading > button { margin-top: 16px; width: 100%; } .reconciliation-totals { padding: 0 16px 16px; gap: 10px; } .reconciliation-totals strong { font-size: 18px; } .reconciliation-footer { padding: 16px; align-items: flex-start; flex-direction: column; } .reconciliation-evidence { padding: 0 16px 16px; } }

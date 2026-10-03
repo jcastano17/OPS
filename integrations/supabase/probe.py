@@ -26,11 +26,11 @@ def read_environment(path: Path) -> dict[str, str]:
         key, separator, value = line.partition("=")
         if not separator or not key.strip().replace("_", "").isalnum():
             raise ValueError("Formato inválido en el archivo de entorno.")
-        values[key.strip()] = value.strip().strip("\"'")
+        values[key.strip()] = value if key.strip() == "SUPABASE_DATABASE_PASSWORD" else value.strip().strip("\"'")
     return values
 
 
-def validate_url(value: str) -> str:
+def validate_url(value: str, password: str | None = None) -> str:
     value = value.replace("postgresql+psycopg://", "postgresql://", 1)
     url = urlsplit(value)
     if url.scheme not in {"postgresql", "postgres"}:
@@ -41,7 +41,7 @@ def validate_url(value: str) -> str:
         raise ValueError("El usuario del pooler no corresponde al proyecto OPS.")
     if url.path != "/postgres":
         raise ValueError("La base del proyecto revisado es postgres.")
-    password = unquote(url.password or "")
+    password = password if password is not None else unquote(url.password or "")
     if not password or password in {"REEMPLAZAR", "[YOUR-PASSWORD]"}:
         raise ValueError("Falta la contraseña privada en el archivo local.")
     if parse_qs(url.query).get("sslmode", [""])[0] not in {"require", "verify-ca", "verify-full"}:
@@ -55,7 +55,8 @@ def main() -> int:
     args = parser.parse_args()
     try:
         values = read_environment(args.env_file)
-        dsn = validate_url(os.environ.get("SUPABASE_ADMIN_DATABASE_URL") or values.get("SUPABASE_ADMIN_DATABASE_URL", ""))
+        password = os.environ.get("SUPABASE_DATABASE_PASSWORD") or values.get("SUPABASE_DATABASE_PASSWORD")
+        dsn = validate_url(os.environ.get("SUPABASE_ADMIN_DATABASE_URL") or values.get("SUPABASE_ADMIN_DATABASE_URL", ""), password)
     except (OSError, ValueError) as error:
         print(str(error))
         return 2
@@ -65,7 +66,8 @@ def main() -> int:
         print("Ejecuta esta prueba en el entorno Python del backend Guía, que incluye psycopg.")
         return 2
     try:
-        with psycopg.connect(dsn, connect_timeout=10, autocommit=True) as connection:
+        connection_options = {"password": password} if password is not None else {}
+        with psycopg.connect(dsn, connect_timeout=10, autocommit=True, **connection_options) as connection:
             with connection.transaction():
                 connection.execute("SET TRANSACTION READ ONLY")
                 tables = connection.execute(
