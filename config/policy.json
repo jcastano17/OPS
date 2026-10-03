@@ -1,0 +1,12 @@
+{
+  "source": "NA-CF-CTB-INS-560 v1, 02-10-2026; recopilado en docs/REQUISITOS_NEGOCIO.md",
+  "years": {
+    "2026": {
+      "smmlv": 1750905,
+      "uvt": 52374,
+      "income_reference_year": 2025,
+      "smmlv_source": "https://dapre.presidencia.gov.co/normativa/normativa/DECRETO%20No.%200159%20DEL%2019%20DE%20FEBRERO%20DE%202026.pdf",
+      "uvt_source": "https://normograma.dian.gov.co/dian/compilacion/docs/resolucion_dian_0238_2025.htm"
+    }
+  }
+}
