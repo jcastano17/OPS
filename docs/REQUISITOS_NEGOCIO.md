@@ -39,6 +39,17 @@ Regla de precedencia propuesta [P]: el **instructivo NA-CF-CTB-INS-560 v1 (02-10
 | F10 | Sesión «Análisis nómina julio 2026» | Sesión Claude Code | Leída parcialmente. Es nómina de empleados; solo aporta la hoja «BD OPS» |
 | F11 | Sesiones «Review June payroll» y «Revisar carpeta de junio» | Sesión Claude Code | Leídas. **No son de OPS**: son nómina y facturación a EPS. Solo dan contexto |
 
+#### Identificadores de Drive de F1 y F2 (trazabilidad)
+
+Son los archivos exactos que se leyeron el 2026-10-03. Para abrir los enlaces hace falta tener permiso sobre el archivo en Drive.
+
+| Fuente | Nombre exacto del archivo | ID de Drive | Enlace | Última modificación (Drive) |
+|---|---|---|---|---|
+| F1 | `NA-CF-CTB-INS-560 INSTRUCTIVO [RADICACIÓN CUENTA DE COBRO CONTRATISTAS].docx` | `1HoucbaAP7Zyh2EMvC7AnqjShBAwP7YJ2` | https://drive.google.com/file/d/1HoucbaAP7Zyh2EMvC7AnqjShBAwP7YJ2/view | 2026-10-02T16:39:08Z |
+| F2 | `NA-CF-CTB-FT-1 FORMATO [CUENTA DE COBRO].xlsx` (dentro dice «VERSIÓN: 6», «FECHA: 12/05/2026») | `1CPUk97X4kMNq7SjGqudrE76dzS71z07t` | https://drive.google.com/file/d/1CPUk97X4kMNq7SjGqudrE76dzS71z07t/view | 2026-05-12T15:35:48Z |
+
+Si en Drive aparece una versión posterior de cualquiera de los dos archivos, hay que revisar este documento contra ella.
+
 ### 1.2 Fuentes que NO se pudieron consultar
 
 - **«OPS JUNIO»** y **«VIVIR IPS OPS payroll June 2026»**. No aparecen entre las sesiones de Claude Code de la cuenta; se revisaron unas 200 sesiones. Parecen conversaciones de claude.ai, y desde este entorno **no hay acceso al historial de chats de claude.ai**. Se usaron como equivalentes F5 y F6, que tratan el mismo mes y el mismo tema.
