@@ -838,7 +838,9 @@ export function createApp(options = {}) {
         "/": "index.html",
         "/app.js": "app.js",
         "/styles.css": "styles.css",
-        "/favicon.svg": "favicon.svg",
+        "/favicon.png": "favicon.png",
+        "/logo-vivir.png": "logo-vivir.png",
+        "/logo-vivir-blanco.png": "logo-vivir-blanco.png",
       };
       if (!assets[path]) fail(404, "Página no encontrada.");
       const file = join(ROOT, "public", assets[path]);
@@ -846,10 +848,12 @@ export function createApp(options = {}) {
         ".html": "text/html",
         ".js": "text/javascript",
         ".css": "text/css",
-        ".svg": "image/svg+xml",
+        ".png": "image/png",
       }[extname(file)];
       res.writeHead(200, {
-        "Content-Type": `${mime}; charset=utf-8`,
+        "Content-Type": mime.startsWith("image/")
+          ? mime
+          : `${mime}; charset=utf-8`,
         "Cache-Control": "no-cache",
       });
       res.end(method === "HEAD" ? undefined : readFileSync(file));

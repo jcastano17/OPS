@@ -59,7 +59,7 @@ const icon = (name, cls = "") =>
   `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${glyphs[name] || glyphs.file}"/></svg>`;
 const badge = (status) =>
   `<span class="badge ${{ Radicada: "blue", "En revisión": "amber", Devuelta: "red", Aprobada: "green" }[status]}"><span></span>${esc(status)}</span>`;
-const logo = `<span class="brand-mark"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 7l10 19L26 7M11 7l5 10 5-10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>VIVIR<span class="brand-sub">PORTAL DE CONTRATISTAS</span></span>`;
+const logo = `<img class="brand-logo" src="/logo-vivir-blanco.png" alt="VIVIR IPS" width="640" height="597"><span class="brand-sub">PORTAL DE CONTRATISTAS</span>`;
 const state = {
   user: null,
   policy: { years: {} },
