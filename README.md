@@ -66,6 +66,8 @@ Reglas implementadas:
 
 Los parámetros por año están en [config/policy.json](config/policy.json), con fuentes oficiales para SMMLV y UVT. Se pueden editar o usar otro archivo mediante `POLICY_FILE`. No hay valores predeterminados para otros años: deben configurarse antes de radicar periodos de esas vigencias.
 
+El proyecto Supabase seleccionado y la preparación de la conexión PostgreSQL de Guía están documentados en [docs/SUPABASE.md](docs/SUPABASE.md). El acceso al panel se verificó; la conexión privada del backend y las migraciones aún están pendientes. Esta demostración sigue usando SQLite.
+
 ## Datos y controles
 
 SQLite almacena usuarios, contratos, cuentas, archivos y eventos. Las bases predeterminadas están en `data/demo/` y `data/live/`; `DATA_DIR` permite otra ubicación. `.env` y `data/` se excluyen de Git. No reutilices una base de demostración para cuentas reales.
