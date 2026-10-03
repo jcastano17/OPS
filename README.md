@@ -1,6 +1,6 @@
 # Guía · Módulo OPS para VIVIR
 
-Módulo de Guía para radicación, auditoría, liquidación mensual y preparación de pagos OPS de VIVIR, con API y eventos para integración con RCM. Incluye una demostración local con datos ficticios. La conexión real al RCM requiere revisar su proyecto y contrato de integración.
+Módulo de Guía para radicación, auditoría, liquidación mensual y preparación de pagos OPS de VIVIR, con API y eventos para integración con RCM. Incluye una demostración local con datos ficticios. Se revisó el proyecto `jcastano17/Guia`: la integración operativa debe incorporarse a su monolito modular FastAPI/PostgreSQL y su interfaz React, compartiendo contexto por IPS. El prototipo Node/SQLite aún no está conectado a ese sistema. Los puntos de conexión y diferencias están en [docs/INTEGRACION_RCM.md](docs/INTEGRACION_RCM.md).
 
 ## Iniciar
 

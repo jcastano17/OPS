@@ -25,7 +25,7 @@ El módulo pertenece a **Guía** y debe participar en el RCM completo. Esta sepa
 | Paquete y plano reservado | `GET /api/lots/:id/package`, `/bank` | Administración |
 | Eventos incrementales | `GET /api/integration/events?after=0&limit=100` | Sesión administrativa autenticada; límite 1–500 |
 
-Las rutas actuales tienen contrato de prototipo. El esquema de eventos tiene `schema_version: 1` y `module: guia.ops`. Al conocer RCM se fijará el prefijo y contrato versionado compatible con su gateway; no se inventa aquí su autenticación.
+Las rutas actuales tienen contrato de prototipo. El esquema de eventos tiene `schema_version: 1` y `module: guia.ops`. Al incorporar OPS a la API nativa de Guía se fijará su contrato versionado; las rutas y la autenticación del prototipo no se reutilizan como si ya fueran nativas.
 
 ```json
 {
@@ -48,7 +48,7 @@ Las rutas actuales tienen contrato de prototipo. El esquema de eventos tiene `sc
 
 Eventos emitidos: `ops.claim.submitted`, `ops.claim.corrected`, `ops.audit.updated`, `ops.claim.status_changed`, `ops.payment_batch.prepared`. El consumidor guarda `next_cursor` después de procesar y deduplica por `id`; una repetición de consulta no debe contabilizar dos veces. No hay envío externo automático ni webhooks pendientes en memoria. La API de eventos no incluye pacientes ni bitácoras clínicas.
 
-## Conexiones necesarias al revisar el repositorio RCM
+## Conexiones necesarias del módulo con RCM
 
 | Sistema | Fuente de verdad y conexión |
 |---|---|
@@ -62,4 +62,28 @@ Eventos emitidos: `ops.claim.submitted`, `ops.claim.corrected`, `ops.audit.updat
 | Conciliación | Pago aceptado/rechazado/efectivo, comprobante e idempotencia por movimiento. Un archivo generado no significa pago. |
 | RCM gerencial | Costos OPS por servicio/programa/sede y margen, sin confundir costos aprobados, causados y pagados. |
 
-Pendiente de conexión real: repositorio de Guía/RCM, contrato de sus APIs, SSO, identificadores, permisos y prueba conjunta. El adaptador de respuesta bancaria y su conciliación todavía no están implementados. Los pagos parciales, reapertura y ajustes de cierres requieren un flujo de reversión contable; esta versión reserva un mes completo una vez y bloquea modificaciones posteriores.
+Pendiente de conexión real: implementación del módulo en Guía, identidad compartida, identificadores, permisos y prueba conjunta. El adaptador de respuesta bancaria y su conciliación todavía no están implementados. Los pagos parciales, reapertura y ajustes de cierres requieren un flujo de reversión contable; esta versión reserva un mes completo una vez y bloquea modificaciones posteriores.
+
+## Revisión del sistema Guía existente
+
+El 3 de octubre de 2026 se identificó y consultó [jcastano17/Guia](https://github.com/jcastano17/Guia), rama `claude/zealous-newton-toq99y`, mediante GitHub autenticado. Se leyeron su README, arquitectura, arranque de API, dependencias de contexto, permisos, bandeja de salida y routers de organización, clínica, facturación y documentos. Esta revisión establece el destino técnico; no acredita una conexión ya ejecutada.
+
+Guía es un monolito modular FastAPI/Python con SQLAlchemy/PostgreSQL y frontend React/TypeScript. Sus dominios comparten transacción, identidad, auditoría, idempotencia y eventos. Por ello la versión operativa de OPS debe incorporarse como dominio `ops` del backend y pantallas del frontend existente. El servidor Node/SQLite de este repositorio queda como prototipo verificable de reglas y flujo. La migración debe conservar los vectores de cálculo y casos de prueba; no se debe desplegar el prototipo como maestro paralelo de usuarios o contratos.
+
+| Punto revisado | Aplicación al módulo OPS |
+|---|---|
+| Contexto autenticado y membresía activa por IPS | Reutilizar el contexto de Guía en cada solicitud. El tenant viene de la identidad validada en servidor; nunca de un campo editable del contratista. Las cookies del prototipo no equivalen a la sesión de Guía. |
+| PostgreSQL y aislamiento por IPS | Modelos, migraciones y políticas RLS para cuentas, contratos OPS, soportes, auditorías y lotes. El SQLite actual es de demostración para una organización. |
+| Identificadores UUID y cantidades monetarias Decimal | Mapear referencias corporativas y preservar exactitud. Los IDs enteros y cálculos en pesos del prototipo requieren adaptación; no son claves corporativas. |
+| `/api/profesionales`, `/api/sedes`, servicios habilitados | Vincular el profesional existente cuando corresponda. Incorporar terceros no asistenciales y sus contratos OPS sin convertirlos en usuarios clínicos. |
+| Atenciones y prestaciones de clínica | Relacionar actividades cobradas con prestaciones verificadas, profesional, sede, programa y cantidad. El costo OPS y el cargo facturable a EPS son conceptos distintos. |
+| Contratos y cargos del RCM | Mantener separados el contrato EPS que determina ingreso y el contrato OPS que determina honorarios. Una tarifa EPS no es automáticamente la tarifa del contratista. |
+| Documentos del sistema | Reutilizar repositorio y metadatos de soportes, referencias y versiones; conservar identidad, consentimiento y permisos de acceso aplicables. |
+| Facturación, glosas, pagos y cartera | Comparar costo con ingreso, glosas y recaudo para seguimiento de margen. No convertir una glosa de EPS en descuento automático al contratista: exige su fundamento contractual. El pago registrado en cartera tampoco acredita un giro OPS. |
+| Idempotencia y control de versión del sistema | Reutilizarlos en radicación, aprobación y reserva de lotes. La reserva mensual actual no sustituye la idempotencia general de Guía. |
+| Auditoría y bandeja de salida transaccionales | Guardar cambio OPS, evidencia y evento en la misma transacción de Guía. Agregar manejadores de eventos OPS y conciliación; la consulta incremental del prototipo no es todavía un consumidor integrado. |
+| Permisos por operación y segregación | Extender permisos para contratista, supervisor, auditor, contabilidad y tesorería. El rol clínico o de facturación existente no concede por sí solo acceso a cuentas bancarias o ejecución de giros. |
+
+Las rutas nativas propuestas bajo `/api/ops` no existen todavía en Guía. Tampoco hay evidencia, en los routers revisados, de un módulo completo de CxP/tesorería de contratistas; esa extensión requiere modelos y flujo propios, conectados con los dominios existentes. La integración se considerará verificada cuando un recorrido con dos IPS pruebe aislamiento, acceso revocado, prestaciones compartidas, liquidación conciliada, aprobación separada, reintentos sin duplicados y respuesta bancaria por beneficiario.
+
+Fuentes de arquitectura del repositorio revisado: [ADR de Guía](https://github.com/jcastano17/Guia/blob/claude/zealous-newton-toq99y/docs/04-arquitectura.md), [registro de routers](https://github.com/jcastano17/Guia/blob/claude/zealous-newton-toq99y/backend/src/guia/main.py), [contexto e idempotencia](https://github.com/jcastano17/Guia/blob/claude/zealous-newton-toq99y/backend/src/guia/deps.py). Referencias de archivos verificadas: arquitectura `752c596c`, arranque `f32aa668`, dependencias `488d8d09`, organización `d5e3e795`, clínica `5a3d887d`, facturación `91f9d05e` y documentos `adb1ccc0` (SHA de cada archivo, no del commit).
