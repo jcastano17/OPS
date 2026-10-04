@@ -1,0 +1,54 @@
+# Criterios de liquidación OPS en contexto IPS
+
+Revisión realizada el 3 de octubre de 2026. Las reglas históricas son antecedentes, no una parametrización fiscal universal. La liquidación exige que el revisor documente actividad, norma, periodo y soportes aplicables. La app comprueba aritmética y coherencia y guarda la verificación humana; no certifica autenticidad ni sustituye una revisión documental pendiente.
+
+## ICA: entidad que cobra, operación y agente retenedor
+
+No se debe trasladar automáticamente la exclusión de ingresos de una IPS a sus contratistas, ni retener por igual a todos. Hay que diferenciar:
+
+1. ICA propio sobre ingresos de VIVIR: sujeto, actividad y recursos.
+2. ICA del beneficiario de la OPS: persona natural/jurídica, actividad efectiva, municipio y posible exclusión/exención.
+3. Obligación de VIVIR de practicar reteICA en esa jurisdicción y para esa operación.
+
+La definición de servicios del artículo 345 de la [Ley 1819 de 2016](https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=79140) comprende actividades ejecutadas por personas naturales o jurídicas; la profesionalidad independiente no es por sí sola una exclusión. Los servicios de apoyo administrativo, mantenimiento y transporte ordinario no se reclasifican como servicio asistencial por pagarlos una IPS.
+
+Para salud deben analizarse el artículo 39.2.d de la Ley 14 de 1983, el artículo 111 de la Ley 788 de 2002, la naturaleza del prestador, la fuente de recursos y los criterios jurisprudenciales vigentes. El [Concepto Minsalud 201811401354401 de 2018](https://www.minsalud.gov.co/Normatividad_Nuevo/Concepto%20Jur%C3%ADdico%20201811401354401%20de%202018.pdf) y la [sentencia C-524 de 2023](https://normograma.dian.gov.co/dian/compilacion/docs/c-524_2023.htm) recogen controversias y antecedentes sobre el alcance de la no sujeción. No equivalen a una decisión individual sobre cada OPS ni justifican presumir que todo ingreso privado de toda IPS esté excluido.
+
+La app requiere en cada renglón municipio, actividad/CIIU y recursos, tratamiento `Gravado / No sujeto / Exento / No agente / Simple`, norma vigente y soporte. Si está gravado exige tarifa por mil, base mínima local en pesos, unidad de aplicación y verificación de agente. La base es el servicio reconocido después de glosas adicionales, sin IVA. No se presume una base mínima nacional de 4 UVT ni un tope uniforme de 10 por mil. Las tarifas históricas contradictorias de Pereira, Yopal y Soacha quedan sin activar automáticamente.
+
+Cuando una norma requiere consolidar la base mínima por municipio y actividad en el mes, el motor agrupa esas operaciones; rechaza tarifas/bases incompatibles. Si exige una unidad diferente de las soportadas (`Renglón` o `Municipio mensual`), requiere ampliación antes de liberar el lote. Cambiar la unidad no es una elección arbitraria: debe corresponder a la norma y modalidad de pago.
+
+## Renta y depuración
+
+- Mes fiscal: mes de pago o abono en cuenta, diferente del periodo de servicio. Agrupación por documento y mes, sumando municipios/programas, conforme al artículo 388 ET.
+- Tabla del artículo 383: siete tramos. Requiere persona natural, clasificación sustentada como renta de trabajo, declaración y mensualización verificadas. En cuentas de cobro se contrasta con los numerales 3 y 4 del instructivo. La elección no se obtiene solo de la profesión.
+- Aportes: salud y pensión obligatorias efectivamente soportadas e imputables, no un estimado automático de 11,4 %. Una PILA con la misma referencia se cuenta una vez; datos diferentes de esa referencia bloquean el cierre. La deducción no reduce el giro bancario: reduce la base de renta.
+- Exenta 25 %: después de aportes y deducciones; límite **anual de 790 UVT**, no tope mensual fijo. El motor suma cierres anteriores de VIVIR del año y un saldo inicial externo a la app, sustentado por el revisor. Se procesan cierres cronológicamente. Fuente: [DIAN Concepto 11383 de 2024](https://normograma.dian.gov.co/dian/compilacion/docs/oficio_dian_11383_2024.htm).
+- Deducciones comunes para 383: dependientes acreditados, 10 % del bruto hasta 32 UVT mensuales; salud adicional certificada hasta 16 UVT; intereses de vivienda mensuales certificados hasta 100 UVT. Se aplican una vez por persona/mes y, con la exención, no superan el 40 % después de ingresos no constitutivos. [Artículos 387 y 388 ET](https://normograma.dian.gov.co/dian/compilacion/docs/estatuto_tributario.htm), [Decreto 359 de 2020](https://normograma.dian.gov.co/dian/compilacion/docs/decreto_0359_2020.htm).
+- Retención general: concepto y tarifa revisados, sin asumir 11 % para todas las personas o servicios. La interfaz permite capturar la tarifa sustentada para honorarios/servicios; no adopta toda la tabla de conceptos como catálogo validado. En personas naturales se excluyen aportes obligatorios imputables soportados; no se aplica el 25 % a la tarifa general.
+- SIMPLE: verificación en RUT; sin retefuente ni reteICA, conservando análisis independiente de IVA. [Artículo 911 ET y Decreto 1091 de 2020](https://www.dian.gov.co/normatividad/Decretos/Decreto_1091_03082020.pdf).
+- ZESE o no sujeto: requiere fundamento y soporte verificados; no se concede por una casilla sin evidencia documental.
+
+Casos aún bloqueados para liquidación automática: AFC y pensión voluntaria (límites individuales y anuales), depuraciones adicionales, pagos acumulados de varios periodos o mensualización especial, tarifas voluntariamente superiores y situaciones no residentes. No se ocultan como cero. La matriz tributaria completa deberá ampliarse al contar con casos y soportes reales.
+
+## IVA y descuentos
+
+La exclusión de servicios de salud humana del artículo 476 ET se clasifica por servicio. No se aplica automáticamente a toda OPS, actividad comercial, bienes o mantenimiento de una IPS. Si existe IVA, el motor lo adiciona al servicio y calcula reteIVA sobre ese IVA con la tarifa sustentada. El revisor verifica responsabilidad del beneficiario y calidad de agente de VIVIR. Los contratos con tratamientos de IVA diferentes dentro de una misma cuenta deben separarse o modelarse por renglón antes de liberarse.
+
+Glosas adicionales = importe sustentado, entre cero y valor del renglón. Las glosas descontadas antes de radicar no se restan nuevamente. Mantenimiento y otros descuentos contractuales requieren soporte y disminuyen el neto, sin reducir automáticamente la base fiscal. Fórmula de giro:
+
+`Servicios reconocidos + IVA − retefuente − reteICA − reteIVA − mantenimiento − otros descuentos`
+
+## PILA, controles y cierre
+
+El acumulado de una persona natural que supera el SMMLV exige PILA revisada y pagada, periodo admisible, ARL acreditada o excepción sustentada e IBC mínimo del instructivo respecto de contratos mensualizados. Las particularidades de cotizantes pensionados, excepciones y novedades requieren evidencia del revisor; no se infieren de aportes cero. Los soportes por radicación pueden resultar insuficientes al consolidar varias cuentas pequeñas: el cierre mensual vuelve a verificar el acumulado.
+
+Aprobación documental y elegibilidad para pago son controles diferentes. Para cerrar: todas las cuentas del mes aprobadas, identidad y banco consistentes, datos tributarios completos, soportes y saldos verificados, neto positivo, sin PDF de cobro repetido ni cuentas reservadas anteriormente. Las cuentas sin mes fiscal asignado impiden cerrar hasta clasificarlas.
+
+El archivo bancario se genera con un snapshot de cuentas, auditoría, reglas, datos del pagador y plano. Una reserva por mes y una por cuenta. Descargar nuevamente devuelve el mismo plano. No hay ejecución bancaria ni confirmación automática de pago.
+
+## Formatos bancarios
+
+Implementados: [Bancolombia PAB](https://www.bancolombia.com/wcm/connect/www.bancolombia.com-26918/21009d17-b6a6-4103-aeff-b3c16c39927b/Formato_Pagos_PAB.pdf?CVID=pjSo-yA&MOD=AJPERES) de 264 caracteres y [SAP](https://www.bancolombia.com/wcm/connect/www.bancolombia.com-26918/6f9dd819-41ab-45f8-b101-8fd39e1943ca/Formato_Pagos_SAP_.pdf?CVID=pjRWEH5&MOD=AJPERES) de 95 caracteres, pagos de proveedores, abono a ahorro/corriente; PAB admite depósito electrónico. Cuentas pagadoras ordinarias. Cuentas maestras, cheques y adendas especiales requieren implementación específica.
+
+Se incluyen relaciones por cualquier banco destino. Los archivos nativos de Davivienda, Bogotá, BBVA, Occidente, Popular, AV Villas, Caja Social, Agrario, Colpatria, Itaú, GNB y otros figuran pendientes de la especificación oficial de su convenio/canal y de una prueba de aceptación. No se reemplazan con CSV presentados como planos válidos. El formato depende del banco pagador: no se necesitan varios planos nativos para destinatarios de diferentes bancos si el convenio permite dispersión interbancaria.

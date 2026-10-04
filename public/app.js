@@ -1,3 +1,4 @@
+import { createPaymentUI } from "./payments.js";
 const $ = (s) => document.querySelector(s);
 const esc = (value) =>
   String(value ?? "").replace(
@@ -59,7 +60,7 @@ const icon = (name, cls = "") =>
   `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${glyphs[name] || glyphs.file}"/></svg>`;
 const badge = (status) =>
   `<span class="badge ${{ Radicada: "blue", "En revisión": "amber", Devuelta: "red", Aprobada: "green" }[status]}"><span></span>${esc(status)}</span>`;
-const logo = `<img class="brand-logo" src="/logo-vivir-blanco.png" alt="VIVIR IPS" width="640" height="597"><span class="brand-sub">PORTAL DE CONTRATISTAS</span>`;
+const logo = `<img class="brand-logo" src="/logo-vivir-blanco.png" alt="VIVIR IPS" width="640" height="597"><span class="brand-sub">GUÍA · CUENTAS OPS</span>`;
 const state = {
   user: null,
   policy: { years: {} },
@@ -70,6 +71,12 @@ const state = {
   users: [],
   search: "",
   filter: "Todas",
+  paymentMonth: monthNow(),
+  paymentReport: null,
+  paymentLot: null,
+  paymentReconciliation: null,
+  bankProfiles: [],
+  auditChecks: {},
 };
 const DOCS = [
   ["cuenta", "Cuenta firmada / factura (PDF)"],
@@ -191,6 +198,7 @@ function render() {
     home: "Inicio",
     claims: admin ? "Cuentas recibidas" : "Mis cuentas",
     contracts: "Contratos",
+    payments: "Liquidación y bancos",
     guide: "Guía de radicación",
   };
   $("#app").innerHTML =
@@ -198,6 +206,7 @@ function render() {
       ["home", "grid", "Inicio"],
       ["claims", "file", admin ? "Cuentas recibidas" : "Mis cuentas"],
       ["contracts", "contract", "Contratos"],
+      ...(admin ? [["payments", "wallet", "Liquidación y bancos"]] : []),
       ["guide", "help", "Guía de radicación"],
     ]
       .map(
@@ -234,6 +243,7 @@ function render() {
     }
   };
   $(".mobile-menu").onclick = () => $(".sidebar").classList.toggle("open");
+  if (state.page === "payments") $("#content").innerHTML = paymentsPage();
   bindContent();
 }
 function pageHead(eyebrow, title, subtitle, action = "") {
@@ -409,6 +419,16 @@ function bindContent() {
     bindTable();
   });
   $("#export")?.addEventListener("click", exportCsv);
+  $("#load-payments")?.addEventListener("click", loadPayments);
+  $("#payment-month")?.addEventListener("change", (e) => {
+    state.paymentMonth = e.target.value;
+    state.paymentReport = null;
+    state.paymentLot = null;
+    state.paymentReconciliation = null;
+    render();
+  });
+  $("#close-lot")?.addEventListener("click", closeLotDialog);
+  $("#reconcile-lot")?.addEventListener("click", reconciliationDialog);
 }
 function exportCsv() {
   const cell = (v) =>
@@ -462,6 +482,16 @@ function showDetail(id) {
     true,
   );
   $("#correct")?.addEventListener("click", () => showClaim(c));
+  if (admin) {
+    const section = document.createElement("section");
+    section.className = "audit-summary";
+    section.innerHTML = `<h3>Auditoría y liquidación</h3><p>${c.audit ? `Revisión guardada por ${esc(c.audit.reviewer)} · Mes fiscal ${esc(c.audit.tax_month || "pendiente")} · Renta ${esc(c.audit.tax_method || "pendiente")}` : "Pendiente de auditoría estructurada. La aprobación requiere verificar documentos y tratamiento tributario."}${c.lot_id ? ` · Lote ${esc(c.lot_id)}` : ""}</p>${["Radicada", "En revisión"].includes(c.status) ? '<button type="button" class="btn secondary" id="audit-account">' + icon("shield") + " Auditar y liquidar</button>" : ""}`;
+    if (c.payment) section.insertAdjacentHTML("beforeend", `<h3>Resultado bancario</h3><p><strong>${esc({PAGADO:"Pago confirmado",ACEPTADO:"Aceptado, por confirmar",RECHAZADO:"Rechazado"}[c.payment.state])}</strong> · ${currency(c.payment.amount)} · ${esc(c.payment.scope)}</p><p>Referencia ${esc(c.payment.reference)} · ${esc(c.payment.date)} · ${esc(c.payment.detail)}</p>`);
+    $("#overlay dialog").querySelector(".document-list").before(section);
+    $("#audit-account")?.addEventListener("click", () =>
+      showAudit(c).catch((e) => toast(e.message, true)),
+    );
+  }
   $("#return-reason")?.addEventListener("change", (e) => {
     if (e.target.value) $("#review textarea").value = e.target.value + ". ";
   });
@@ -793,4 +823,21 @@ async function init() {
     renderLogin();
   }
 }
+const { paymentsPage, loadPayments, closeLotDialog, showAudit, reconciliationDialog } =
+  createPaymentUI({
+    state,
+    $,
+    esc,
+    currency,
+    icon,
+    pageHead,
+    api,
+    dialog,
+    closeOverlay,
+    refresh,
+    render,
+    toast,
+    formError,
+    showDetail,
+  });
 init();

@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../server.js";
+import { CHECKS } from "../lib/liquidation.js";
 
 test("Radicación, permisos, revisión, corrección, aprobación y persistencia", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "vivir-ops-test-"));
@@ -436,6 +437,48 @@ test("Radicación, permisos, revisión, corrección, aprobación y persistencia"
               method: "POST",
               cookie: admin,
               body: { status: "En revisión" },
+            })
+          ).status,
+          200,
+        );
+        assert.equal(
+          (
+            await request(route, {
+              method: "POST",
+              cookie: admin,
+              body: { status: "Aprobada", review_confirmed: true },
+            })
+          ).status,
+          409,
+          "La confirmación genérica no sustituye la auditoría estructurada",
+        );
+        assert.equal(
+          (
+            await request(`/api/claims/${claim.id}/audit`, {
+              method: "PUT",
+              cookie: admin,
+              body: {
+                tax_month: body.period,
+                tax_method: "General",
+                general_rate: 10,
+                bank_code: "7",
+                checks: Object.fromEntries(
+                  Object.keys(CHECKS).map((k) => [k, true]),
+                ),
+                evidence:
+                  "PRUEBA FICTICIA: cuenta, RUT, identidad y bitácoras revisados.",
+                tax_source: "PRUEBA: honorarios con tarifa contractual 10 %",
+                iva_mode: "Excluido",
+                iva_source: "PRUEBA: artículo 476; servicio salud humana.",
+                lines: body.metadata.lines.map(() => ({
+                  glosa: 0,
+                  ica_mode: "No sujeto",
+                  activity:
+                    "PRUEBA: servicio de salud y origen de recursos revisados",
+                  ica_source:
+                    "PRUEBA: norma y exclusión de beneficiario verificadas",
+                })),
+              },
             })
           ).status,
           200,
