@@ -83,13 +83,27 @@ SQLite almacena usuarios, contratos, cuentas, archivos y eventos. Las bases pred
 
 Las contraseñas se guardan con scrypt y sal única. Las sesiones duran ocho horas, usan cookies HttpOnly y requieren validación de origen en las escrituras. Los permisos se verifican en el servidor, incluida la descarga de archivos. Los documentos se descargan como adjuntos; no se ejecutan macros ni se convierte contenido de Excel.
 
+## Informe interno de diferencias de retención
+
+Herramienta interna para Contabilidad: recalcula la retención mensual de personas naturales con la regla vigente y la compara con la practicada. No se muestra a los contratistas.
+
+```sh
+node scripts/diferencias-retencion.js entrada.csv salida.csv
+```
+
+La entrada es un CSV (coma o punto y coma) con una fila por persona y mes. Columnas: `documento`, `nombre`, `mes` (AAAA-MM), `valor_bruto`, `aportes_salud`, `aportes_pension`, `retencion_practicada`, `manifestacion_25` (SI/NO), `opta_costos` (SI/NO), `deduccion_dependientes` (SI/NO), `intereses_vivienda` y `medicina_prepagada`. Los valores van en pesos.
+
+La salida, separada por punto y coma, agrega la retención recalculada y la `diferencia` (practicada − recalculada; positiva = retenido en exceso). También incluye la diferencia acumulada por persona y los acumulados anuales de los topes de 790 UVT y 1.340 UVT, aplicados en orden de meses con la UVT del año de `mes` en [config/policy.json](config/policy.json). Los acumulados anuales empiezan en cero, así que el archivo debe incluir todos los meses del año pagados por VIVIR. Los aportes en blanco se toman como cero y se marcan «sin soporte de aportes». Las filas con opción de costos no se recalculan porque requieren la tarifa general sustentada.
+
+Hay un ejemplo ficticio en [scripts/ejemplo-diferencias-retencion.csv](scripts/ejemplo-diferencias-retencion.csv). Guarda los archivos con datos reales dentro de `data/`, que está excluida de Git.
+
 ## Pruebas
 
 ```sh
 npm test
 ```
 
-Las pruebas usan datos ficticios y bases temporales. Cubren el flujo y permisos, límites de los siete tramos 383, juramento y método de retención, topes anuales de 790 y 1.340 UVT, glosas y descuentos, deducciones, consolidación de ICA y PILA, formatos bancarios y ceros iniciales, fórmulas Excel, cierre único, ZIP, eventos para RCM, importación bancaria con evidencia, reintentos sin duplicados, estados de pago, vista previa sin escrituras y persistencia de lotes y conciliación tras reiniciar.
+Las pruebas usan datos ficticios y bases temporales. Cubren el flujo y permisos, límites de los siete tramos 383, juramento y método de retención, topes anuales de 790 y 1.340 UVT, informe de diferencias de retención, glosas y descuentos, deducciones, consolidación de ICA y PILA, formatos bancarios y ceros iniciales, fórmulas Excel, cierre único, ZIP, eventos para RCM, importación bancaria con evidencia, reintentos sin duplicados, estados de pago, vista previa sin escrituras y persistencia de lotes y conciliación tras reiniciar.
 
 ## Pendiente para operación real
 

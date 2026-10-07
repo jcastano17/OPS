@@ -5,6 +5,7 @@ El módulo pertenece a **Guía** y debe participar en el RCM completo. Esta sepa
 ## Implementado y reutilizable
 
 - `lib/liquidation.js`: funciones deterministas `auditClaim`, `settle`, `article383`, `withholding383` (depuración 383 con topes anuales de 790 y 1.340 UVT), `effectiveOath`, `allocate`; reciben cuentas, reglas por año y cierres anteriores, sin depender de HTTP ni SQLite.
+- `lib/withholdingReview.js`: `reviewWithholding`, cálculo puro del informe interno de diferencias de retención con las mismas reglas de `withholding383`.
 - `lib/banks.js`: perfiles por banco pagador y formatos PAB/SAP; relaciones por banco destino. No inicia transferencias.
 - `lib/workbook.js`: exportador del cuadro, desglose, auditoría, soportes, parámetros y relaciones bancarias.
 - API JSON con autorización en servidor y registro durable de eventos en la misma transacción que cada cambio de negocio.
