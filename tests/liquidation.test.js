@@ -7,14 +7,13 @@ import {
   allocate,
   settle,
   auditClaim,
-  CHECKS,
 } from "../lib/liquidation.js";
 import { bankFile } from "../lib/banks.js";
 import { paymentWorkbook } from "../lib/workbook.js";
 const policy = JSON.parse(
   readFileSync(new URL("../config/policy.json", import.meta.url)),
 );
-import { claim, exampleAudit } from "./fixtures.js";
+import { claim } from "./fixtures.js";
 
 test("Tabla 383: fronteras y constantes de todos los tramos", () => {
   const uvt = 52374;

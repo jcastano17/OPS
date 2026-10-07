@@ -393,16 +393,6 @@ function bindTable() {
 }
 function bindContent() {
   bindTable();
-  document.querySelectorAll("[data-page]").forEach(
-    (b) =>
-      (b.onclick = () => {
-        state.page = b.dataset.page;
-        state.search = "";
-        state.filter = "Todas";
-        render();
-        window.scrollTo(0, 0);
-      }),
-  );
   $("#new-user")?.addEventListener("click", showUser);
   $("#new-contract")?.addEventListener("click", showContract);
   document.querySelectorAll("[data-filter]").forEach(
@@ -433,7 +423,7 @@ function bindContent() {
 function exportCsv() {
   const cell = (v) =>
     `"${String(v ?? "")
-      .replace(/^[=+@\-]/, "'$&")
+      .replace(/^[=+@-]/, "'$&")
       .replace(/"/g, '""')}"`;
   const content =
     "\uFEFF" +
@@ -486,7 +476,11 @@ function showDetail(id) {
     const section = document.createElement("section");
     section.className = "audit-summary";
     section.innerHTML = `<h3>Auditoría y liquidación</h3><p>${c.audit ? `Revisión guardada por ${esc(c.audit.reviewer)} · Mes fiscal ${esc(c.audit.tax_month || "pendiente")} · Renta ${esc(c.audit.tax_method || "pendiente")}` : "Pendiente de auditoría estructurada. La aprobación requiere verificar documentos y tratamiento tributario."}${c.lot_id ? ` · Lote ${esc(c.lot_id)}` : ""}</p>${["Radicada", "En revisión"].includes(c.status) ? '<button type="button" class="btn secondary" id="audit-account">' + icon("shield") + " Auditar y liquidar</button>" : ""}`;
-    if (c.payment) section.insertAdjacentHTML("beforeend", `<h3>Resultado bancario</h3><p><strong>${esc({PAGADO:"Pago confirmado",ACEPTADO:"Aceptado, por confirmar",RECHAZADO:"Rechazado"}[c.payment.state])}</strong> · ${currency(c.payment.amount)} · ${esc(c.payment.scope)}</p><p>Referencia ${esc(c.payment.reference)} · ${esc(c.payment.date)} · ${esc(c.payment.detail)}</p>`);
+    if (c.payment)
+      section.insertAdjacentHTML(
+        "beforeend",
+        `<h3>Resultado bancario</h3><p><strong>${esc({ PAGADO: "Pago confirmado", ACEPTADO: "Aceptado, por confirmar", RECHAZADO: "Rechazado" }[c.payment.state])}</strong> · ${currency(c.payment.amount)} · ${esc(c.payment.scope)}</p><p>Referencia ${esc(c.payment.reference)} · ${esc(c.payment.date)} · ${esc(c.payment.detail)}</p>`,
+      );
     $("#overlay dialog").querySelector(".document-list").before(section);
     $("#audit-account")?.addEventListener("click", () =>
       showAudit(c).catch((e) => toast(e.message, true)),
@@ -823,21 +817,26 @@ async function init() {
     renderLogin();
   }
 }
-const { paymentsPage, loadPayments, closeLotDialog, showAudit, reconciliationDialog } =
-  createPaymentUI({
-    state,
-    $,
-    esc,
-    currency,
-    icon,
-    pageHead,
-    api,
-    dialog,
-    closeOverlay,
-    refresh,
-    render,
-    toast,
-    formError,
-    showDetail,
-  });
+const {
+  paymentsPage,
+  loadPayments,
+  closeLotDialog,
+  showAudit,
+  reconciliationDialog,
+} = createPaymentUI({
+  state,
+  $,
+  esc,
+  currency,
+  icon,
+  pageHead,
+  api,
+  dialog,
+  closeOverlay,
+  refresh,
+  render,
+  toast,
+  formError,
+  showDetail,
+});
 init();

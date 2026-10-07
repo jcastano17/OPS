@@ -1,4 +1,4 @@
-import {createReconciliationUI} from "./reconciliation.js";
+import { createReconciliationUI } from "./reconciliation.js";
 export function createPaymentUI({
   state,
   $,
@@ -15,7 +15,20 @@ export function createPaymentUI({
   formError,
   showDetail,
 }) {
-  const {reconciliationPanel,reconciliationDialog} = createReconciliationUI({state,$,esc,currency,icon,api,dialog,closeOverlay,toast,formError,loadPayments,refresh});
+  const { reconciliationPanel, reconciliationDialog } = createReconciliationUI({
+    state,
+    $,
+    esc,
+    currency,
+    icon,
+    api,
+    dialog,
+    closeOverlay,
+    toast,
+    formError,
+    loadPayments,
+    refresh,
+  });
   function paymentsPage() {
     const r = state.paymentReport,
       lot = state.paymentLot;
@@ -41,7 +54,9 @@ export function createPaymentUI({
       ]);
       state.paymentReport = r.report;
       state.paymentLot = r.lot;
-      state.paymentReconciliation = r.lot ? await api(`/lots/${r.lot.id}/reconciliation`) : null;
+      state.paymentReconciliation = r.lot
+        ? await api(`/lots/${r.lot.id}/reconciliation`)
+        : null;
       state.bankProfiles = p.profiles;
       state.auditChecks = p.checks;
       render();
@@ -232,5 +247,11 @@ export function createPaymentUI({
       }
     };
   }
-  return { paymentsPage, loadPayments, closeLotDialog, showAudit, reconciliationDialog };
+  return {
+    paymentsPage,
+    loadPayments,
+    closeLotDialog,
+    showAudit,
+    reconciliationDialog,
+  };
 }
