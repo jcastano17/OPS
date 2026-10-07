@@ -187,53 +187,65 @@ test("Radicación, permisos, revisión, corrección, aprobación y persistencia"
           metadata: {
             ...metadata,
             lines: [{ ...metadata.lines[0], unit_price: 500000 }],
-            oath: { ...metadata.oath, q3: "SI", q4: "NO" },
           },
           documents: docs.filter((d) => d.kind !== "seguridad"),
         };
+        const declaration = {
+          kind: "declaracion",
+          name: "anexo1.pdf",
+          content: docs[0].content,
+        };
+        const withOath = (changes, documents = low.documents) => ({
+          ...low,
+          metadata: {
+            ...low.metadata,
+            oath: { ...low.metadata.oath, ...changes },
+          },
+          documents,
+        });
+        for (const [changes, documents, reason] of [
+          [{ q2: "SI" }, low.documents, "Cuenta de cobro con numeral 2 en SI"],
+          [{ q5: "" }, low.documents, "Juramento sin respuesta"],
+          [{ q3: "SI" }, low.documents, "Renta exenta 25 % sin Anexo 1"],
+          [
+            { q3: "SI", q4: "SI" },
+            [...low.documents, declaration],
+            "Numerales 3 y 4 contradictorios",
+          ],
+        ])
+          assert.equal(
+            (
+              await request("/api/claims", {
+                method: "POST",
+                cookie: contractor,
+                body: withOath(changes, documents),
+              })
+            ).status,
+            400,
+            reason,
+          );
+        const lowResult = await request("/api/claims", {
+          method: "POST",
+          cookie: contractor,
+          body: low,
+        });
         assert.equal(
-          (
-            await request("/api/claims", {
-              method: "POST",
-              cookie: contractor,
-              body: {
-                ...low,
-                metadata: {
-                  ...low.metadata,
-                  oath: { ...low.metadata.oath, q2: "SI" },
-                },
-              },
-            })
-          ).status,
-          400,
-        );
-        assert.equal(
-          (
-            await request("/api/claims", {
-              method: "POST",
-              cookie: contractor,
-              body: {
-                ...low,
-                metadata: {
-                  ...low.metadata,
-                  oath: { ...low.metadata.oath, q4: "SI" },
-                },
-              },
-            })
-          ).status,
-          400,
-        );
-        assert.equal(
-          (
-            await request("/api/claims", {
-              method: "POST",
-              cookie: contractor,
-              body: low,
-            })
-          ).status,
+          lowResult.status,
           201,
-          "No exigir PILA debajo del umbral; solicitud 383 sin declaración se recibe para revisión general",
+          "No exigir PILA debajo del umbral; tabla 383 por defecto sin Anexo 1",
         );
+        assert.equal(lowResult.data.claim.metadata.oath_version, 2);
+        assert.equal(lowResult.data.claim.metadata.sworn_exemption, false);
+        const sworn = withOath({ q3: "SI" }, [...low.documents, declaration]);
+        sworn.metadata.lines = [{ ...low.metadata.lines[0], city: "Chía" }];
+        const swornResult = await request("/api/claims", {
+          method: "POST",
+          cookie: contractor,
+          body: sworn,
+        });
+        assert.equal(swornResult.status, 201, "Manifestación con Anexo 1");
+        assert.equal(swornResult.data.claim.metadata.sworn_exemption, true);
+        assert.equal(swornResult.data.claim.metadata.costs_option, false);
         const invoice = {
           ...body,
           metadata: {
@@ -248,6 +260,20 @@ test("Radicación, permisos, revisión, corrección, aprobación y persistencia"
             ["cuenta", "informe", "rut", "banco"].includes(d.kind),
           ),
         };
+        assert.equal(
+          (
+            await request("/api/claims", {
+              method: "POST",
+              cookie: contractor,
+              body: {
+                ...invoice,
+                metadata: { ...invoice.metadata, person_type: "Natural" },
+              },
+            })
+          ).status,
+          400,
+          "Persona natural que factura también responde el juramento",
+        );
         assert.equal(
           (
             await request("/api/claims", {
@@ -452,37 +478,49 @@ test("Radicación, permisos, revisión, corrección, aprobación y persistencia"
           409,
           "La confirmación genérica no sustituye la auditoría estructurada",
         );
-        assert.equal(
-          (
-            await request(`/api/claims/${claim.id}/audit`, {
-              method: "PUT",
-              cookie: admin,
-              body: {
-                tax_month: body.period,
-                tax_method: "General",
-                general_rate: 10,
-                bank_code: "7",
-                checks: Object.fromEntries(
-                  Object.keys(CHECKS).map((k) => [k, true]),
-                ),
-                evidence:
-                  "PRUEBA FICTICIA: cuenta, RUT, identidad y bitácoras revisados.",
-                tax_source: "PRUEBA: honorarios con tarifa contractual 10 %",
-                iva_mode: "Excluido",
-                iva_source: "PRUEBA: artículo 476; servicio salud humana.",
-                lines: body.metadata.lines.map(() => ({
-                  glosa: 0,
-                  ica_mode: "No sujeto",
-                  activity:
-                    "PRUEBA: servicio de salud y origen de recursos revisados",
-                  ica_source:
-                    "PRUEBA: norma y exclusión de beneficiario verificadas",
-                })),
-              },
-            })
-          ).status,
-          200,
+        const audit = {
+          tax_month: body.period,
+          tax_method: "General",
+          general_rate: 10,
+          bank_code: "7",
+          checks: Object.fromEntries(Object.keys(CHECKS).map((k) => [k, true])),
+          evidence:
+            "PRUEBA FICTICIA: cuenta, RUT, identidad y bitácoras revisados.",
+          tax_source: "PRUEBA: honorarios de persona natural; art. 383 ET",
+          iva_mode: "Excluido",
+          iva_source: "PRUEBA: artículo 476; servicio salud humana.",
+          lines: body.metadata.lines.map(() => ({
+            glosa: 0,
+            ica_mode: "No sujeto",
+            activity:
+              "PRUEBA: servicio de salud y origen de recursos revisados",
+            ica_source: "PRUEBA: norma y exclusión de beneficiario verificadas",
+          })),
+        };
+        const general = await request(`/api/claims/${claim.id}/audit`, {
+          method: "PUT",
+          cookie: admin,
+          body: audit,
+        });
+        assert.equal(general.status, 200);
+        assert.ok(
+          general.data.validation.issues.some(
+            (x) => x.code === "METODO_JURAMENTO",
+          ),
+          "Sin opción escrita de costos no procede la tarifa general",
         );
+        const table = await request(`/api/claims/${claim.id}/audit`, {
+          method: "PUT",
+          cookie: admin,
+          body: {
+            ...audit,
+            tax_method: "383",
+            general_rate: null,
+            monthly_payment_verified: true,
+          },
+        });
+        assert.equal(table.status, 200);
+        assert.deepEqual(table.data.validation.issues, []);
         assert.equal(
           (
             await request(route, {

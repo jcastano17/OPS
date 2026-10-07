@@ -7,13 +7,24 @@ import {
   allocate,
   settle,
   auditClaim,
+  effectiveOath,
 } from "../lib/liquidation.js";
 import { bankFile } from "../lib/banks.js";
 import { paymentWorkbook } from "../lib/workbook.js";
 const policy = JSON.parse(
   readFileSync(new URL("../config/policy.json", import.meta.url)),
 );
-import { claim } from "./fixtures.js";
+import { claim, exampleAudit } from "./fixtures.js";
+const UVT = 52374;
+// Natural person on table 383 (default method): no written option for costs.
+const as383 = (c, { sworn = false } = {}) => {
+  c.metadata.oath.q3 = sworn ? "SI" : "NO";
+  c.metadata.oath.q4 = "NO";
+  c.audit.tax_method = "383";
+  delete c.audit.general_rate;
+  c.audit.monthly_payment_verified = true;
+  return c;
+};
 
 test("Tabla 383: fronteras y constantes de todos los tramos", () => {
   const uvt = 52374;
@@ -58,12 +69,11 @@ test("383 consolida todas las cuentas; deduplica PILA y controla 790 UVT anual",
   const c1 = claim(1, 6000000),
     c2 = claim(2, 6000000);
   for (const c of [c1, c2]) {
-    c.audit.tax_method = "383";
+    as383(c, { sworn: true });
     c.audit.declaration_verified = true;
-    c.audit.monthly_payment_verified = true;
     c.audit.annual_exemption_opening = 790 * 52374 - 100000;
+    c.audit.annual_relief_opening = 790 * 52374 - 100000;
     c.audit.annual_source = "PRUEBA: saldo certificado de VIVIR";
-    c.metadata.oath.q3 = c.metadata.oath.q4 = "SI";
   }
   const r = settle([c1, c2], "2026-09", policy).rows[0];
   assert.equal(r.contributions, 499008);
@@ -84,6 +94,145 @@ test("383 consolida todas las cuentas; deduplica PILA y controla 790 UVT anual",
   ];
   assert.equal(settle([c1, c2], "2026-09", policy, prior).rows[0].exemption, 0);
 });
+test("383 por defecto: sin manifestación jurada no hay 25 %, con nota y sin bloqueo", () => {
+  const c = as383(claim(1, 6000000));
+  let r = settle([c], "2026-09", policy).rows[0];
+  assert.equal(r.contributions, 499008);
+  assert.equal(r.exemption, 0);
+  assert.equal(r.tax_base, 5500992);
+  // (5.500.992 − 95 UVT) × 19 %, calculated independently.
+  assert.equal(r.income_tax, 99838);
+  assert.equal(
+    r.ready,
+    true,
+    "Sin 25 % ni deducciones no exige saldos anuales",
+  );
+  assert.ok(r.notes.some((n) => n.startsWith("Sin manifestación jurada")));
+  c.audit.declaration_verified = true;
+  assert.equal(
+    settle([c], "2026-09", policy).rows[0].exemption,
+    0,
+    "La verificación del revisor no sustituye el numeral 3 del contratista",
+  );
+  c.audit.tax_method = "General";
+  c.audit.general_rate = 10;
+  assert.ok(
+    auditClaim(c, policy).issues.some((x) => x.code === "METODO_JURAMENTO"),
+    "Tarifa general sin opción escrita de costos",
+  );
+});
+test("383 con manifestación jurada: 25 % solo verificado y con saldos anuales", () => {
+  const c = as383(claim(1, 6000000), { sworn: true });
+  let r = settle([c], "2026-09", policy).rows[0];
+  assert.equal(r.exemption, 0, "Manifestación sin verificar: sin 25 %");
+  assert.equal(r.ready, true);
+  assert.ok(r.notes.some((n) => n.includes("sin verificar")));
+  c.audit.declaration_verified = true;
+  const codes = auditClaim(c, policy).issues.map((x) => x.code);
+  for (const code of ["383_ANUAL", "383_TOPE_ANUAL", "383_ACUMULADO"])
+    assert.ok(codes.includes(code), code);
+  c.audit.annual_exemption_opening = c.audit.annual_relief_opening = 0;
+  c.audit.annual_source = "PRUEBA: sin saldos anteriores ante VIVIR";
+  r = settle([c], "2026-09", policy).rows[0];
+  assert.equal(r.exemption, 1375248, "25 % de 5.500.992");
+  assert.equal(r.tax_base, 4125744);
+  assert.equal(r.income_tax, 0);
+  assert.equal(r.ready, true);
+  c.audit.annual_exemption_opening = 790 * UVT - 1000;
+  c.audit.annual_relief_opening = 790 * UVT - 1000;
+  r = settle([c], "2026-09", policy).rows[0];
+  assert.equal(r.exemption, 1000, "Saldo del tope anual de 790 UVT");
+  assert.ok(r.notes.some((n) => n.includes("790 UVT")));
+});
+test("Juramento: numerales 3 y 4 excluyentes; opción de costos exige tarifa general", () => {
+  const c = claim();
+  assert.equal(settle([c], "2026-09", policy).rows[0].ready, true);
+  c.audit.tax_method = "383";
+  c.audit.monthly_payment_verified = true;
+  assert.ok(
+    auditClaim(c, policy).issues.some((x) => x.code === "METODO_JURAMENTO"),
+  );
+  c.audit.tax_method = "General";
+  c.metadata.oath.q3 = "SI";
+  assert.ok(
+    auditClaim(c, policy).issues.some(
+      (x) => x.code === "JURAMENTO_CONTRADICTORIO",
+    ),
+  );
+  const simple = claim();
+  simple.metadata.oath.q4 = "NO";
+  simple.metadata.tax_regime = "Simple";
+  simple.audit.tax_method = "Simple";
+  simple.audit.lines[0].ica_mode = "Simple";
+  assert.deepEqual(auditClaim(simple, policy).issues, [], "SIMPLE sustentado");
+});
+test("Juramento anterior al cambio: se mapea de forma conservadora y se anota", () => {
+  assert.deepEqual(effectiveOath({ oath: { q3: "SI", q4: "SI", q5: "SI" } }), {
+    q1: undefined,
+    q2: undefined,
+    q3: "SI",
+    q4: "NO",
+    q5: "SI",
+    legacy: true,
+  });
+  assert.equal(effectiveOath({ oath: { q3: "SI", q4: "NO" } }).q3, "NO");
+  const old = claim();
+  delete old.metadata.oath_version;
+  old.metadata.oath = { q1: "SI", q2: "NO", q3: "NO", q4: "NO", q5: "SI" };
+  const review = auditClaim(old, policy);
+  assert.ok(review.issues.some((x) => x.code === "METODO_JURAMENTO"));
+  assert.ok(review.notes.some((n) => n.includes("07-10-2026")));
+});
+test("Tope anual de 1.340 UVT de deducciones y exentas, acumulado entre meses", () => {
+  const month = (id, period) => {
+    const c = claim(id, 20000000);
+    c.period = period;
+    c.audit = exampleAudit(period);
+    as383(c, { sworn: true });
+    Object.assign(c.audit, {
+      declaration_verified: true,
+      annual_exemption_opening: 0,
+      annual_relief_opening: 1340 * UVT - 10000000,
+      annual_source: "PRUEBA: saldo certificado de deducciones y exentas",
+      deductions: {
+        dependents: true,
+        housing_interest: 8000000,
+        prepaid_health: 2000000,
+        verified: true,
+        source: "PRUEBA: certificados mensuales ficticios",
+      },
+    });
+    return c;
+  };
+  const august = settle([month(1, "2026-08")], "2026-08", policy);
+  const a = august.rows[0];
+  assert.equal(a.ready, true);
+  assert.equal(a.deductions + a.exemption, 7800397, "Límite del 40 %");
+  const lots = [{ period: "2026-08", report: august }];
+  const september = settle([month(2, "2026-09")], "2026-09", policy, lots);
+  const s = september.rows[0];
+  assert.equal(s.ready, true);
+  assert.equal(s.deductions, 2199603, "Saldo anual de 1.340 UVT");
+  assert.equal(s.exemption, 0);
+  assert.equal(s.tax_base, 20000000 - 499008 - 2199603);
+  assert.equal(
+    1340 * UVT - 10000000 + a.deductions + a.exemption + s.deductions,
+    1340 * UVT,
+  );
+  assert.ok(s.notes.some((n) => n.includes("1.340 UVT")));
+  lots.push({ period: "2026-09", report: september });
+  const o = settle([month(3, "2026-10")], "2026-10", policy, lots).rows[0];
+  assert.equal(o.deductions + o.exemption, 0, "Tope agotado en el año");
+  const nextYear = month(4, "2026-10");
+  nextYear.audit.annual_relief_opening = 0;
+  assert.equal(
+    settle([nextYear], "2026-10", policy, [
+      { period: "2025-12", report: { rows: [{ ...s, claim_ids: [90] }] } },
+    ]).rows[0].deductions,
+    7751352,
+    "Los cierres de otro año no consumen el tope",
+  );
+});
 test("ICA se define por operación; ninguna exclusión automática por IPS", () => {
   const c = claim();
   c.audit.lines[0].ica_mode = "";
@@ -96,12 +245,10 @@ test("ICA se define por operación; ninguna exclusión automática por IPS", () 
   assert.ok(auditClaim(c, policy).issues.some((x) => x.code === "ICA_NORMA"));
 });
 test("Deducciones 383: límites individuales, una vez por persona y límite conjunto 40 %", () => {
-  const c = claim(1, 20000000);
-  c.audit.tax_method = "383";
-  c.audit.declaration_verified = c.audit.monthly_payment_verified = true;
-  c.audit.annual_exemption_opening = 0;
+  const c = as383(claim(1, 20000000), { sworn: true });
+  c.audit.declaration_verified = true;
+  c.audit.annual_exemption_opening = c.audit.annual_relief_opening = 0;
   c.audit.annual_source = "PRUEBA: sin saldo de exención anterior ante VIVIR";
-  c.metadata.oath.q3 = c.metadata.oath.q4 = "SI";
   assert.equal(
     settle([c], "2026-09", policy).rows[0].exemption,
     4875248,

@@ -86,7 +86,7 @@ const DOCS = [
   ["banco", "Certificación bancaria"],
   ["identidad", "Documento de identidad"],
   ["rut", "RUT"],
-  ["declaracion", "Declaración juramentada del periodo"],
+  ["declaracion", "Declaración juramentada renta exenta 25 % (Anexo 1)"],
   ["paz", "Paz y salvo"],
 ];
 let busy = false;
@@ -338,7 +338,7 @@ function guide() {
     [
       "02",
       "Prepara los soportes",
-      "Adjunta la cuenta firmada, el Excel original y los soportes aplicables. Se recibe un PDF por soporte, de hasta 8 MB cada uno; la cuenta en Excel puede ser .xlsx o .xlsm. Adjunta certificación bancaria y RUT vigentes en cada radicación. Para cuenta de cobro también adjunta el Excel original y la cédula. La PILA y la declaración se piden según tus respuestas y el valor cobrado.",
+      "Adjunta la cuenta firmada, el Excel original y los soportes aplicables. Se recibe un PDF por soporte, de hasta 8 MB cada uno; la cuenta en Excel puede ser .xlsx o .xlsm. Adjunta certificación bancaria y RUT vigentes en cada radicación. Para cuenta de cobro también adjunta el Excel original y la cédula. La PILA se pide según el valor cobrado y la declaración juramentada (Anexo 1) solo si eliges la renta exenta del 25 %.",
       "upload",
     ],
     [
@@ -539,6 +539,8 @@ function showClaim(existing = null, contractId = null) {
       state.claims.find((c) => c.metadata?.bank)?.metadata ||
       {},
     bank = previous.bank || {};
+  // Answers from claims filed before oath v2 had other meanings: never prefill them.
+  const previousOath = previous.oath_version >= 2 ? previous.oath || {} : {};
 
   const initialLines = existing?.metadata?.lines?.length
     ? existing.metadata.lines
@@ -549,19 +551,28 @@ function showClaim(existing = null, contractId = null) {
         },
       ];
   dialog(
-    `<span class="eyebrow">${existing ? "CORREGIR CUENTA" : "NUEVA RADICACIÓN"}</span><h2>${existing ? esc(existing.radicado) : "Vamos a preparar tu cuenta"}</h2><p class="muted">Registra los servicios prestados y los soportes de este periodo.</p>${existing ? `<div class="notice warning">${icon("alert")}<span>${esc(existing.events.find((e) => e.status === "Devuelta")?.note || "Revisa y corrige tu cuenta antes de enviarla.")}</span></div>` : ""}<form id="claim-form"><div class="form-section-label"><span>1</span> Contrato y periodo</div><label>Contrato<select name="contract_id" ${existing ? "disabled" : ""}>${contracts.map((c) => `<option value="${c.id}" ${selected.id === c.id ? "selected" : ""}>${esc(c.number)}</option>`).join("")}</select></label><div id="contract-info" class="contract-info"></div><div class="form-grid"><label>Periodo a cobrar<input type="month" name="period" value="${existing?.period || monthNow()}" required ${existing ? "readonly" : ""}></label><label>Profesión / cargo<input name="profession" value="${esc(previous.profession)}" required maxlength="200"></label></div><div class="form-section-label"><span>2</span> Servicios prestados</div><p class="field-help">Agrega un renglón por servicio, municipio, programa o tarifa. El total se calcula con la cantidad y el valor unitario.</p><div id="service-lines">${initialLines.map(lineForm).join("")}</div><button class="btn secondary compact" type="button" id="add-line">${icon("plus")} Agregar servicio</button><label>Total bruto de la cuenta (COP)<input type="number" name="amount" readonly required></label><label>Actividades realizadas<textarea name="description" rows="3" minlength="10" maxlength="3000" placeholder="Resume las actividades realizadas durante este periodo…" required>${esc(existing?.description || "")}</textarea></label><div class="form-section-label"><span>3</span> Información para revisión y pago</div><div class="form-grid"><label>Banco / entidad financiera<input name="bank_name" value="${esc(bank.name)}" required maxlength="200"></label><label>Tipo de cuenta<select name="bank_type">${["Ahorros", "Corriente", "Depósito electrónico"].map((v) => `<option ${bank.type === v ? "selected" : ""}>${v}</option>`).join("")}</select></label></div><label>Número de cuenta<input name="bank_number" value="${esc(bank.number)}" inputmode="numeric" pattern="[0-9]{6,30}" required><small class="field-help">Se guarda como texto para conservar los ceros iniciales.</small></label><div class="form-grid"><label>Titular de la cuenta<input name="bank_holder" value="${esc(bank.holder || state.user.name)}" required maxlength="200"></label><label>Documento del titular<input name="bank_document" value="${esc(bank.document || state.user.document)}" inputmode="numeric" pattern="[0-9]{5,15}" required></label></div><div class="form-grid"><label>Tipo de persona<select name="person_type">${["Natural", "Jurídica"].map((v) => `<option ${previous.person_type === v ? "selected" : ""}>${v}</option>`).join("")}</select></label><label>Régimen tributario<select name="tax_regime">${["Ordinario", "Simple"].map((v) => `<option ${previous.tax_regime === v ? "selected" : ""}>${v}</option>`).join("")}</select></label></div><div class="form-grid"><label>Documento a radicar<select name="document_type"><option ${previous.document_type !== "Factura electrónica" ? "selected" : ""}>Cuenta de cobro</option><option ${previous.document_type === "Factura electrónica" ? "selected" : ""}>Factura electrónica</option></select></label><label id="cufe-label">CUFE de la factura<input name="cufe" value="${esc(previous.cufe)}" maxlength="200"></label></div><div id="oath-block"><h3>Juramento tributario</h3><p class="field-help">Marca una respuesta para cada numeral. La revisión seguirá el instructivo de VIVIR.</p>${[
-      ["q1", "Estoy obligado(a) a declarar renta por el año de referencia."],
-      ["q2", "Mis ingresos brutos del año de referencia superaron 3.500 UVT."],
+    `<span class="eyebrow">${existing ? "CORREGIR CUENTA" : "NUEVA RADICACIÓN"}</span><h2>${existing ? esc(existing.radicado) : "Vamos a preparar tu cuenta"}</h2><p class="muted">Registra los servicios prestados y los soportes de este periodo.</p>${existing ? `<div class="notice warning">${icon("alert")}<span>${esc(existing.events.find((e) => e.status === "Devuelta")?.note || "Revisa y corrige tu cuenta antes de enviarla.")}</span></div>` : ""}<form id="claim-form"><div class="form-section-label"><span>1</span> Contrato y periodo</div><label>Contrato<select name="contract_id" ${existing ? "disabled" : ""}>${contracts.map((c) => `<option value="${c.id}" ${selected.id === c.id ? "selected" : ""}>${esc(c.number)}</option>`).join("")}</select></label><div id="contract-info" class="contract-info"></div><div class="form-grid"><label>Periodo a cobrar<input type="month" name="period" value="${existing?.period || monthNow()}" required ${existing ? "readonly" : ""}></label><label>Profesión / cargo<input name="profession" value="${esc(previous.profession)}" required maxlength="200"></label></div><div class="form-section-label"><span>2</span> Servicios prestados</div><p class="field-help">Agrega un renglón por servicio, municipio, programa o tarifa. El total se calcula con la cantidad y el valor unitario.</p><div id="service-lines">${initialLines.map(lineForm).join("")}</div><button class="btn secondary compact" type="button" id="add-line">${icon("plus")} Agregar servicio</button><label>Total bruto de la cuenta (COP)<input type="number" name="amount" readonly required></label><label>Actividades realizadas<textarea name="description" rows="3" minlength="10" maxlength="3000" placeholder="Resume las actividades realizadas durante este periodo…" required>${esc(existing?.description || "")}</textarea></label><div class="form-section-label"><span>3</span> Información para revisión y pago</div><div class="form-grid"><label>Banco / entidad financiera<input name="bank_name" value="${esc(bank.name)}" required maxlength="200"></label><label>Tipo de cuenta<select name="bank_type">${["Ahorros", "Corriente", "Depósito electrónico"].map((v) => `<option ${bank.type === v ? "selected" : ""}>${v}</option>`).join("")}</select></label></div><label>Número de cuenta<input name="bank_number" value="${esc(bank.number)}" inputmode="numeric" pattern="[0-9]{6,30}" required><small class="field-help">Se guarda como texto para conservar los ceros iniciales.</small></label><div class="form-grid"><label>Titular de la cuenta<input name="bank_holder" value="${esc(bank.holder || state.user.name)}" required maxlength="200"></label><label>Documento del titular<input name="bank_document" value="${esc(bank.document || state.user.document)}" inputmode="numeric" pattern="[0-9]{5,15}" required></label></div><div class="form-grid"><label>Tipo de persona<select name="person_type">${["Natural", "Jurídica"].map((v) => `<option ${previous.person_type === v ? "selected" : ""}>${v}</option>`).join("")}</select></label><label>Régimen tributario<select name="tax_regime">${["Ordinario", "Simple"].map((v) => `<option ${previous.tax_regime === v ? "selected" : ""}>${v}</option>`).join("")}</select></label></div><div class="form-grid"><label>Documento a radicar<select name="document_type"><option ${previous.document_type !== "Factura electrónica" ? "selected" : ""}>Cuenta de cobro</option><option ${previous.document_type === "Factura electrónica" ? "selected" : ""}>Factura electrónica</option></select></label><label id="cufe-label">CUFE de la factura<input name="cufe" value="${esc(previous.cufe)}" maxlength="200"></label></div><div id="oath-block"><h3>Juramento tributario</h3><p class="field-help">Marca SI o NO en cada numeral. Para personas naturales la retención se calcula por defecto con la tabla del art. 383, restando los aportes obligatorios a salud y pensión soportados y las deducciones certificadas, sin la renta exenta del 25 %. Responde SI en el numeral 3 solo si no vas a restar costos ni gastos: debes adjuntar la declaración juramentada (Anexo 1). Responde SI en el numeral 4 solo si vas a restar costos y gastos: se aplica la tarifa general. Los numerales 3 y 4 no pueden ser ambos SI.</p>${[
+      [
+        "q1",
+        "Estoy obligado(a) a declarar renta por el año gravable anterior.",
+      ],
+      [
+        "q2",
+        "Mis ingresos brutos del año gravable anterior superaron 3.500 UVT (debo facturar electrónicamente).",
+      ],
       [
         "q3",
-        "Solicito la tabla del art. 383 con depuración y declaro que no tomaré costos ni deducciones.",
+        "Opto por la renta exenta del 25 % y declaro bajo juramento que no restaré costos ni gastos asociados.",
       ],
-      ["q4", "Adjunto la declaración juramentada vigente para el periodo."],
+      [
+        "q4",
+        "Opto por restar costos y gastos asociados a esta renta (se aplica la tarifa general).",
+      ],
       ["q5", "Efectué los aportes a salud, pensión y ARL."],
     ]
       .map(
         ([k, text], i) =>
-          `<label class="oath-row"><span>${i + 1}. ${text}</span><select name="${k}" required><option value="">Selecciona</option><option value="SI" ${previous.oath?.[k] === "SI" ? "selected" : ""}>SI</option><option value="NO" ${previous.oath?.[k] === "NO" ? "selected" : ""}>NO</option></select></label>`,
+          `<label class="oath-row"><span>${i + 1}. ${text}</span><select name="${k}" required><option value="">Selecciona</option><option value="SI" ${previousOath[k] === "SI" ? "selected" : ""}>SI</option><option value="NO" ${previousOath[k] === "NO" ? "selected" : ""}>NO</option></select></label>`,
       )
       .join(
         "",
@@ -595,12 +606,18 @@ function showClaim(existing = null, contractId = null) {
   }
   function updateRequirements() {
     const invoice = form.document_type.value === "Factura electrónica";
+    const natural = form.person_type.value === "Natural";
     const annual = state.policy.years[form.period.value.slice(0, 4)];
-    $("#oath-block").hidden = invoice;
+    $("#oath-block").hidden = !natural;
     $("#cufe-label").hidden = !invoice;
     form.cufe.required = invoice;
     for (const k of ["q1", "q2", "q3", "q4", "q5"])
-      form.elements[k].required = !invoice;
+      form.elements[k].required = natural;
+    form.q4.setCustomValidity(
+      natural && form.q3.value === "SI" && form.q4.value === "SI"
+        ? "Los numerales 3 y 4 son excluyentes: responde SI solo en uno de ellos."
+        : "",
+    );
     const required = [
       "cuenta",
       "informe",
@@ -611,9 +628,7 @@ function showClaim(existing = null, contractId = null) {
       Number(form.amount.value) > (annual?.smmlv ?? 0)
         ? ["seguridad"]
         : []),
-      ...(!invoice && form.q3.value === "SI" && form.q4.value === "SI"
-        ? ["declaracion"]
-        : []),
+      ...(natural && form.q3.value === "SI" ? ["declaracion"] : []),
     ];
     DOCS.forEach(([k]) => {
       form.elements[k].required = required.includes(k);
@@ -710,15 +725,17 @@ function showClaim(existing = null, contractId = null) {
         },
         person_type: form.person_type.value,
         tax_regime: form.tax_regime.value,
-        requests_383: form.q3.value === "SI",
         document_type: form.document_type.value,
         cufe: form.cufe.value,
-        oath: Object.fromEntries(
-          ["q1", "q2", "q3", "q4", "q5"].map((k) => [
-            k,
-            form.elements[k].value,
-          ]),
-        ),
+        oath:
+          form.person_type.value === "Natural"
+            ? Object.fromEntries(
+                ["q1", "q2", "q3", "q4", "q5"].map((k) => [
+                  k,
+                  form.elements[k].value,
+                ]),
+              )
+            : {},
       };
       const d = await api(
         existing ? `/claims/${existing.id}` : "/claims",
@@ -751,10 +768,21 @@ function showClaim(existing = null, contractId = null) {
     }
   };
 }
+// Oath v2 (2026-10-07). Earlier claims stored other meanings in numerals 3 and 4.
+function withholdingChoice(m) {
+  if (m.person_type !== "Natural") return "Retención según factura y RUT";
+  if (!(m.oath_version >= 2))
+    return "Juramento anterior al 07-10-2026: requiere nueva revisión";
+  if (m.oath?.q4 === "SI")
+    return "Opta por restar costos y gastos: tarifa general";
+  if (m.oath?.q3 === "SI")
+    return "Tabla 383 con renta exenta del 25 % (manifestación jurada)";
+  return "Tabla 383 sin renta exenta del 25 %";
+}
 function businessDetail(c) {
   const m = c.metadata || {};
   if (!m.lines?.length) return "";
-  return `<h3>Servicios prestados</h3><div class="table-scroll services-detail"><table><thead><tr><th>MUNICIPIO / PROGRAMA</th><th>SERVICIO</th><th>CANT.</th><th>TARIFA</th><th>SUBTOTAL</th></tr></thead><tbody>${m.lines.map((l) => `<tr><td>${esc(l.city)}<small>${esc(l.department)} · ${esc(l.program)}<br>${esc(l.entity)} · ${esc(l.modality)}</small></td><td>${esc(l.service)}</td><td>${l.quantity}</td><td>${currency(l.unit_price)}</td><td>${currency(l.subtotal)}</td></tr>`).join("")}</tbody></table></div><h3>Datos bancarios y tributarios</h3><dl class="detail-person"><div><dt>Banco / cuenta</dt><dd>${esc(m.bank.name)} · ${esc(m.bank.type)}<br>${esc(m.bank.number)}</dd></div><div><dt>Titular</dt><dd>${esc(m.bank.holder)} · ${esc(m.bank.document)}</dd></div><div><dt>Profesión / tipo de persona</dt><dd>${esc(m.profession)} · ${esc(m.person_type)}</dd></div><div><dt>Régimen / declaraciones</dt><dd>${esc(m.tax_regime)} · ${m.declares_income ? "Declarante" : "No declarante"}<br>${m.requests_383 ? "Solicita revisión de tabla 383" : "Sin solicitud de tabla 383"}</dd></div></dl>${m.bank.document !== c.contractor_document ? '<div class="notice warning">' + icon("alert") + "<span>El documento del titular bancario difiere del contratista. Administración debe verificar esta diferencia.</span></div>" : ""}`;
+  return `<h3>Servicios prestados</h3><div class="table-scroll services-detail"><table><thead><tr><th>MUNICIPIO / PROGRAMA</th><th>SERVICIO</th><th>CANT.</th><th>TARIFA</th><th>SUBTOTAL</th></tr></thead><tbody>${m.lines.map((l) => `<tr><td>${esc(l.city)}<small>${esc(l.department)} · ${esc(l.program)}<br>${esc(l.entity)} · ${esc(l.modality)}</small></td><td>${esc(l.service)}</td><td>${l.quantity}</td><td>${currency(l.unit_price)}</td><td>${currency(l.subtotal)}</td></tr>`).join("")}</tbody></table></div><h3>Datos bancarios y tributarios</h3><dl class="detail-person"><div><dt>Banco / cuenta</dt><dd>${esc(m.bank.name)} · ${esc(m.bank.type)}<br>${esc(m.bank.number)}</dd></div><div><dt>Titular</dt><dd>${esc(m.bank.holder)} · ${esc(m.bank.document)}</dd></div><div><dt>Profesión / tipo de persona</dt><dd>${esc(m.profession)} · ${esc(m.person_type)}</dd></div><div><dt>Régimen / declaraciones</dt><dd>${esc(m.tax_regime)} · ${m.declares_income ? "Declarante" : "No declarante"}<br>${withholdingChoice(m)}</dd></div></dl>${m.bank.document !== c.contractor_document ? '<div class="notice warning">' + icon("alert") + "<span>El documento del titular bancario difiere del contratista. Administración debe verificar esta diferencia.</span></div>" : ""}`;
 }
 function showUser() {
   dialog(

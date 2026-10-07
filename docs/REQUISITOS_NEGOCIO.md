@@ -153,6 +153,8 @@ Campos de control del lado de VIVIR [C] (planilla del usuario, F7):
 - **[D]** El formato v6 (F2) tiene **6 numerales**: incluye la «retención por honorarios 10–11 %» y separa «solicita 383» de «depuración». Según F1, la versión vigente es la de 5 numerales.
 - **[P]** La app debe usar el bloque de 5 numerales.
 
+> **Nota 2026-10-07 (decisión aprobada).** Retención de personas naturales: tabla del art. 383 por defecto, sin solicitud ni declaración (Ley 2277 de 2022, art. 8). La renta exenta del 25 % solo se aplica con manifestación jurada de no restar costos ni gastos. La tarifa general solo se aplica si el contratista opta por escrito por restar costos y gastos. En consecuencia, la app cambia el sentido de los numerales 3 y 4: **3** = «Opto por la renta exenta del 25 % y declaro bajo juramento que no restaré costos ni gastos asociados» (exige el Anexo 1); **4** = «Opto por restar costos y gastos asociados a esta renta (se aplica la tarifa general)». Ambos en SI es error de formulario. La tabla anterior se conserva como antecedente. Criterios vigentes en `docs/CRITERIOS_LIQUIDACION.md`.
+
 ### 3.5 Declaración juramentada art. 383 (Anexo 1) [C] F1 §5.3
 
 Campos:
@@ -297,6 +299,8 @@ $ DE PSS        = 0                si TOTAL ≤ 1.750.000
 - Numerales 3 y 4 = SI más la declaración → **tabla del art. 383** con depuración y renta exenta del 25 %.
 - En cualquier otro caso → **retención general de honorarios o servicios**, con la tarifa del contrato (10 % / 11 %).
 - Facturadores → según la factura y el RUT.
+
+> **Nota 2026-10-07 (decisión aprobada).** Se reemplaza la regla anterior: tabla del art. 383 por defecto para personas naturales; 25 % solo con manifestación jurada; tarifa general solo con opción escrita de costos y gastos. Deducciones y rentas exentas limitadas al 40 % y a 1.340 UVT anuales, y el 25 % a 790 UVT anuales, sin topes mensuales fijos. Fuentes y detalle en `docs/CRITERIOS_LIQUIDACION.md`.
 
 **[C-M]/[P] Doctrina aplicada en las planillas de junio a agosto** (F4, F5, F8).
 
@@ -528,6 +532,7 @@ En la app [P], esto equivale a los atributos de la cuenta **departamento**, **se
 
 1. **Flujo de estados** y quién aprueba en cada paso: jefe inmediato, contabilidad, tesorería, auditoría (§6.2).
 2. **Algoritmo de retención**: el art. 383 consolidado por persona y mes, o la tarifa general del contrato. Y cuál es la tarifa general (§5.2).
+   - **Decidido 2026-10-07:** art. 383 por defecto, consolidado por persona y mes; 25 % solo con manifestación jurada; tarifa general solo con opción escrita de costos y gastos, con la tarifa sustentada por el revisor (§3.4, §5.2).
 3. **Tabla de tarifas ICA**: cuál de las dos fuentes vale, y si la retención se calcula por sede o por municipio de ejecución (§5.2).
 4. **Glosas**: el instructivo exige radicar el neto después de glosas, mientras que las planillas de julio y agosto las trataban como «informativas». ¿La app debe registrar las glosas de auditoría y bloquear la radicación si el valor no las descuenta?
 5. **Cédula y RUT en cada radicación**, o reutilizar los documentos vigentes del maestro (§4.4).

@@ -48,7 +48,10 @@ export const claim = (id = 1, gross = 3500000) => ({
     person_type: "Natural",
     tax_regime: "Ordinario",
     document_type: "Cuenta de cobro",
-    oath: { q3: "NO", q4: "NO", q5: "SI" },
+    // Oath v2: the fixture opted in writing to subtract costs (numeral 4), so the
+    // general rate entered by the reviewer applies.
+    oath: { q1: "SI", q2: "NO", q3: "NO", q4: "SI", q5: "SI" },
+    oath_version: 2,
     bank: {
       name: "Banco de prueba",
       number: "000123456789",

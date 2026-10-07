@@ -10,7 +10,13 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { resolve, dirname, join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
-import { auditClaim, settle, validMonth, CHECKS } from "./lib/liquidation.js";
+import {
+  auditClaim,
+  settle,
+  validMonth,
+  CHECKS,
+  OATH_VERSION,
+} from "./lib/liquidation.js";
 import { bankFile, BANK_PROFILES, relationshipCsv } from "./lib/banks.js";
 import { paymentWorkbook } from "./lib/workbook.js";
 import {
@@ -418,6 +424,7 @@ export function createApp(options = {}) {
       declaration_verified: b.declaration_verified === true,
       monthly_payment_verified: b.monthly_payment_verified === true,
       annual_exemption_opening: number(b.annual_exemption_opening, true),
+      annual_relief_opening: number(b.annual_relief_opening, true),
       annual_source: clean(b.annual_source, 2000),
       iva_mode: clean(b.iva_mode, 30),
       iva_source: clean(b.iva_source, 2000),
@@ -1299,12 +1306,19 @@ export function createApp(options = {}) {
               400,
               "Administración debe configurar los parámetros del año del periodo cobrado.",
             );
-          const oath = info.oath ?? {};
+          // Oath v2: answered by every natural person (cuenta de cobro or
+          // factura), because it defines the withholding method: table 383 by
+          // default, 25 % only with the sworn manifestation (q3), general rate
+          // only with the written option for costs (q4). No defaults.
+          const natural = info.person_type === "Natural";
+          const oath = natural
+            ? Object.fromEntries(
+                ["q1", "q2", "q3", "q4", "q5"].map((k) => [k, info.oath?.[k]]),
+              )
+            : {};
           if (
-            info.document_type === "Cuenta de cobro" &&
-            !["q1", "q2", "q3", "q4", "q5"].every((k) =>
-              ["SI", "NO"].includes(oath[k]),
-            )
+            natural &&
+            !Object.values(oath).every((v) => ["SI", "NO"].includes(v))
           )
             fail(
               400,
@@ -1318,6 +1332,11 @@ export function createApp(options = {}) {
               400,
               "Con la información declarada debes seleccionar factura electrónica, según el instructivo de VIVIR.",
             );
+          if (oath.q3 === "SI" && oath.q4 === "SI")
+            fail(
+              400,
+              "Los numerales 3 y 4 son excluyentes: la renta exenta del 25 % exige no restar costos ni gastos. Responde SI solo en uno de ellos.",
+            );
           if (info.document_type === "Factura electrónica" && !clean(info.cufe))
             fail(400, "Registra el CUFE de la factura electrónica.");
           const metadata = {
@@ -1329,9 +1348,10 @@ export function createApp(options = {}) {
             document_type: info.document_type,
             cufe: clean(info.cufe),
             oath,
+            oath_version: OATH_VERSION,
             declares_income: oath.q1 === "SI",
-            requests_383: oath.q3 === "SI",
-            declaration_attached: oath.q4 === "SI",
+            sworn_exemption: oath.q3 === "SI",
+            costs_option: oath.q4 === "SI",
           };
           const normalize = (s) =>
             s
@@ -1380,13 +1400,12 @@ export function createApp(options = {}) {
               "El instructivo exige PILA para una cuenta de persona natural superior a un SMMLV.",
             );
           if (
-            metadata.requests_383 &&
-            metadata.declaration_attached &&
+            metadata.sworn_exemption &&
             !documents.some((d) => d.kind === "declaracion")
           )
             fail(
               400,
-              "Indicaste que anexas la declaración: adjunta el PDF del periodo cobrado.",
+              "Elegiste la renta exenta del 25 % (numeral 3): adjunta la declaración juramentada (Anexo 1) firmada en PDF.",
             );
           const names = {
             cuenta:

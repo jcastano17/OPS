@@ -31,7 +31,7 @@ Para probar la liquidación y el paquete bancario, inicia `npm run demo:finance`
 - Contratos con vigencia, supervisor y honorario mensual de referencia.
 - Periodo, profesión, múltiples servicios por departamento, municipio, entidad, programa y modalidad; cantidad, tarifa y suma automática de subtotales.
 - Datos bancarios, conservando el número de cuenta como texto.
-- Cuenta de cobro o factura electrónica; CUFE para facturas y cinco respuestas explícitas SI/NO en el juramento de las cuentas.
+- Cuenta de cobro o factura electrónica; CUFE para facturas y cinco respuestas explícitas SI/NO en el juramento tributario de las personas naturales.
 - Adjuntos independientes, comprobación básica de formato, hasta 8 MB por archivo y nombres normalizados al guardar.
 - Radicado único, fecha del primer envío, seguimiento e historial con autor y fecha de cada cambio.
 - Revisión, devolución con observaciones y corrección manteniendo contrato, periodo y radicado.
@@ -39,7 +39,7 @@ Para probar la liquidación y el paquete bancario, inicia `npm run demo:finance`
 - Búsqueda por radicado, contrato, contratista, municipio, programa o entidad; filtros de estado y exportación CSV del resultado filtrado.
 - Interfaz adaptable a escritorio y celular.
 - Auditoría estructurada por soporte, revisor, fecha y evidencia; renta, IVA, banco, glosas y tratamiento ICA por municipio/actividad.
-- Consolidación por persona y mes fiscal, separado del periodo del servicio; tabla 383 y control de exención anual, aportes reales sin duplicar PILA, deducciones comunes con sus límites y tarifa general sustentada.
+- Consolidación por persona y mes fiscal, separado del periodo del servicio; tabla 383 por defecto para personas naturales, control anual de la exención del 25 % (790 UVT) y de deducciones más rentas exentas (1.340 UVT), aportes reales sin duplicar PILA, deducciones comunes con sus límites y tarifa general sustentada solo con opción escrita de costos.
 - Neto con glosas adicionales, IVA, retefuente, ICA, reteIVA, mantenimiento y descuentos contractuales; pendientes impiden preparar el pago.
 - Cuadro Excel con fórmulas y valores del cierre, servicios, soportes, auditoría, pendientes, parámetros y relaciones por banco destino.
 - Lote mensual reservado una sola vez, copia inmutable y SHA256; paquete ZIP con cuadro, plano PAB/SAP, relaciones por banco y auditoría JSON.
@@ -59,8 +59,16 @@ Reglas implementadas:
 - Cuenta firmada en PDF, Excel original (.xlsx o .xlsm), identidad, RUT, certificación bancaria y bitácoras/listado para cuenta de cobro.
 - Factura en PDF, CUFE, RUT, certificación bancaria y bitácoras/listado para facturadores.
 - PILA para personas naturales cuando el valor supera el SMMLV del año configurado.
-- Declaración adjunta cuando se solicita la tabla 383 y se declara que se anexa. Solicitarla sin anexar la declaración permite enviar para revisión general, conforme al instructivo.
+- Juramento tributario de cinco numerales SI/NO, sin respuestas predeterminadas, para toda persona natural (cuenta de cobro o factura), en su versión del 7 de octubre de 2026:
+  1. Obligado(a) a declarar renta por el año gravable anterior.
+  2. Ingresos brutos del año gravable anterior superiores a 3.500 UVT (debe facturar electrónicamente).
+  3. «Opto por la renta exenta del 25 % y declaro bajo juramento que no restaré costos ni gastos asociados.»
+  4. «Opto por restar costos y gastos asociados a esta renta (se aplica la tarifa general).»
+  5. Efectuó los aportes a salud, pensión y ARL.
+- La retención de personas naturales se calcula por defecto con la tabla del art. 383, sin solicitud ni declaración (Ley 2277 de 2022, art. 8). La renta exenta del 25 % solo se aplica con el numeral 3 en SI y la manifestación jurada verificada por el revisor. La tarifa general solo se aplica con el numeral 4 en SI. Los numerales 3 y 4 en SI son contradictorios y se rechazan. Detalle y fuentes en [docs/CRITERIOS_LIQUIDACION.md](docs/CRITERIOS_LIQUIDACION.md).
+- La declaración juramentada (Anexo 1) es obligatoria solo cuando el numeral 3 está en SI.
 - Una cuenta de cobro con el numeral 2 en SI se devuelve como error de formulario para que se seleccione factura electrónica, según el instructivo. No se determina de forma independiente la obligación fiscal.
+- Las cuentas radicadas antes del 7 de octubre de 2026 usan el juramento anterior. El motor las interpreta de forma conservadora y deben revisarse de nuevo.
 - El total debe coincidir con la suma de cantidad × tarifa de cada servicio. Los pesos se redondean por renglón.
 - Detección provisional de posibles duplicados por contratista + periodo + conjunto de municipios + valor. Permite otras cuentas del mismo mes con municipios o valores distintos. La regla histórica debe ratificarse; la comparación no resuelve por sí sola el caso de programas distintos con municipio y valor iguales.
 - Las correcciones solo están habilitadas para cuentas devueltas. El historial de estados se conserva; los archivos vigentes reemplazan a los anteriores.
@@ -81,7 +89,7 @@ Las contraseñas se guardan con scrypt y sal única. Las sesiones duran ocho hor
 npm test
 ```
 
-Las pruebas usan datos ficticios y bases temporales. Cubren el flujo y permisos, límites de los siete tramos 383, control anual, glosas y descuentos, deducciones, consolidación de ICA y PILA, formatos bancarios y ceros iniciales, fórmulas Excel, cierre único, ZIP, eventos para RCM, importación bancaria con evidencia, reintentos sin duplicados, estados de pago, vista previa sin escrituras y persistencia de lotes y conciliación tras reiniciar.
+Las pruebas usan datos ficticios y bases temporales. Cubren el flujo y permisos, límites de los siete tramos 383, juramento y método de retención, topes anuales de 790 y 1.340 UVT, glosas y descuentos, deducciones, consolidación de ICA y PILA, formatos bancarios y ceros iniciales, fórmulas Excel, cierre único, ZIP, eventos para RCM, importación bancaria con evidencia, reintentos sin duplicados, estados de pago, vista previa sin escrituras y persistencia de lotes y conciliación tras reiniciar.
 
 ## Pendiente para operación real
 
