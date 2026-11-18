@@ -1,4 +1,6 @@
-# Conciliación de giros OPS
+# Conciliación de giros OPS (flujo del prototipo local)
+
+Este documento describe el flujo implementado en el prototipo Node/SQLite de este repositorio. No describe el dominio `ops` de Guía ni su despliegue en Azure; la paridad de estas funciones debe verificarse contra [jcastano17/Guia](https://github.com/jcastano17/Guia) (ver [INTEGRACION_RCM.md](INTEGRACION_RCM.md)).
 
 La generación de archivos reserva el lote. Tesorería descarga el resultado original del banco y registra los movimientos en **Liquidación y bancos → Conciliación de pagos → Registrar resultados**. Este flujo registra evidencias; no conecta con el banco ni ordena transferencias.
 
@@ -13,4 +15,4 @@ Una clave UUID de importación impide repetir el mismo comando con otros datos. 
 
 Administración ve el lote y sus soportes. Cada contratista ve únicamente el resultado de su consolidado en las cuentas que le pertenecen; si varias cuentas forman el mismo giro, su valor es el consolidado de la persona, no un pago adicional por cada cuenta.
 
-Esta primera versión funciona en el prototipo local. La integración nativa con Guía/Supabase, los permisos separados de tesorería y contabilidad, los lectores de respuesta de cada banco, conciliación de extractos y reversión contable siguen pendientes.
+Esta primera versión funciona en el prototipo local. La paridad con el dominio `ops` de Guía sobre PostgreSQL en Azure no se ha verificado en esta revisión; los permisos separados de tesorería y contabilidad, los lectores de respuesta de cada banco, la conciliación de extractos y la reversión contable no están implementados en el prototipo. Supabase fue un antecedente de octubre de 2026 ([SUPABASE.md](SUPABASE.md)) y no forma parte del destino de integración.
