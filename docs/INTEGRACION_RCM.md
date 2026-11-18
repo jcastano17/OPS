@@ -1,8 +1,21 @@
 # Guía · módulo OPS e integración RCM
 
-El módulo pertenece a **Guía** y debe participar en el RCM completo. Esta separación es funcional: radicación y validación del costo OPS, auditoría, liquidación, cuentas por pagar, tesorería y conciliación. El prototipo local tiene usuarios y contratos propios para pruebas; no es aún el maestro corporativo ni está conectado al RCM real.
+El módulo pertenece a **Guía** y debe participar en el RCM completo. Esta separación es funcional: radicación y validación del costo OPS, auditoría, liquidación, cuentas por pagar, tesorería y conciliación. El prototipo local de este repositorio tiene usuarios y contratos propios para pruebas; no es el maestro corporativo ni está conectado al RCM real.
 
-## Implementado y reutilizable
+## Estado actual verificable (revisión 2026-11-18)
+
+Revisión de la rama `main` de [jcastano17/Guia](https://github.com/jcastano17/Guia) mediante GitHub el 2026-11-18, commit [6c5fe5b](https://github.com/jcastano17/Guia/commit/6c5fe5b06e09459b965481703e8b761c209782f6). Hechos verificables en el código:
+
+- [backend/src/guia/main.py](https://github.com/jcastano17/Guia/blob/6c5fe5b06e09459b965481703e8b761c209782f6/backend/src/guia/main.py) registra `guia.ops.router` y `router_world_office` con prefijo `/api`.
+- [backend/src/guia/ops/router.py](https://github.com/jcastano17/Guia/blob/6c5fe5b06e09459b965481703e8b761c209782f6/backend/src/guia/ops/router.py) declara `APIRouter(prefix="/ops")`. Las rutas nativas del dominio OPS existen bajo `/api/ops`.
+- [backend/src/guia/config.py](https://github.com/jcastano17/Guia/blob/6c5fe5b06e09459b965481703e8b761c209782f6/backend/src/guia/config.py) declara PostgreSQL, `documentos_backend` con opciones `local` o `azure_blob`, identidad Google y Microsoft Entra, y Azure Key Vault.
+- [docs/13-despliegue-azure.md](https://github.com/jcastano17/Guia/blob/6c5fe5b06e09459b965481703e8b761c209782f6/docs/13-despliegue-azure.md) documenta Azure Container Apps (API y web), PostgreSQL Flexible Server, Blob Storage, Key Vault y Front Door.
+
+Consecuencias para este documento: el dominio `ops` ya existe en Guía y el destino de persistencia es PostgreSQL en Azure, no Supabase. Esta revisión es de código y documentación; no recertifica el ambiente ni el despliegue, ni confirma qué funciones del prototipo están implementadas con paridad en el dominio `ops`. Esa paridad se verifica función por función contra Guía. La sección [Revisión del sistema Guía existente (histórica, 2026-10-03)](#revisión-del-sistema-guía-existente-histórica-2026-10-03) se conserva como antecedente y algunas de sus afirmaciones ya no describen el estado actual; se señalan en esa sección.
+
+## Implementado y reutilizable en el prototipo
+
+Lo siguiente está implementado en este repositorio. Son contratos y reglas del prototipo; no se afirma que estén en producción ni replicados en Guía.
 
 - `lib/liquidation.js`: funciones deterministas `auditClaim`, `settle`, `article383`, `allocate`; reciben cuentas, reglas por año y cierres anteriores, sin depender de HTTP ni SQLite.
 - `lib/banks.js`: perfiles por banco pagador y formatos PAB/SAP; relaciones por banco destino. No inicia transferencias.
@@ -10,7 +23,9 @@ El módulo pertenece a **Guía** y debe participar en el RCM completo. Esta sepa
 - API JSON con autorización en servidor y registro durable de eventos en la misma transacción que cada cambio de negocio.
 - Lotes inmutables con hash SHA256 y reserva única de cada cuenta. Estado `Preparado para pago` separado de pago efectivo.
 
-## API actual
+## API del prototipo
+
+Rutas servidas por el servidor Node/SQLite de este repositorio. No son las rutas `/api/ops` de Guía.
 
 | Operación | Ruta | Acceso |
 |---|---|---|
@@ -27,7 +42,7 @@ El módulo pertenece a **Guía** y debe participar en el RCM completo. Esta sepa
 | Vista previa y registro del resultado | `POST /api/lots/:id/reconciliation/preview`, `POST /api/lots/:id/reconciliation` | Administración; revisión del soporte original requerida |
 | Eventos incrementales | `GET /api/integration/events?after=0&limit=100` | Sesión administrativa autenticada; límite 1–500 |
 
-Las rutas actuales tienen contrato de prototipo. El esquema de eventos tiene `schema_version: 1` y `module: guia.ops`. Al incorporar OPS a la API nativa de Guía se fijará su contrato versionado; las rutas y la autenticación del prototipo no se reutilizan como si ya fueran nativas.
+Las rutas anteriores tienen contrato de prototipo. El esquema de eventos tiene `schema_version: 1` y `module: guia.ops`. El contrato versionado del dominio `ops` nativo lo fija el repositorio de Guía; las rutas y la autenticación del prototipo no se reutilizan como si fueran las nativas, y la equivalencia entre ambos contratos no se ha verificado en esta revisión.
 
 ```json
 {
@@ -66,13 +81,15 @@ El evento de resultado identifica lote, documento del beneficiario, cuentas cons
 | Conciliación | Pago aceptado/rechazado/efectivo, comprobante e idempotencia por movimiento. Un archivo generado no significa pago. |
 | RCM gerencial | Costos OPS por servicio/programa/sede y margen, sin confundir costos aprobados, causados y pagados. |
 
-Pendiente de conexión real: implementación del módulo en Guía, identidad compartida, identificadores, permisos y prueba conjunta. La conciliación del prototipo acepta un CSV normalizado con revisión manual y soporte bancario original; los adaptadores de formatos de respuesta propios de cada convenio todavía no están implementados. Los pagos parciales por beneficiario, reintentos tras rechazo, reapertura y ajustes de cierres requieren un flujo de reversión contable; esta versión reserva un mes completo una vez y bloquea modificaciones posteriores.
+Pendiente de verificación contra Guía/Azure: paridad de cada regla del prototipo con el dominio `ops`, identidad compartida, identificadores, permisos y prueba conjunta. La conciliación del prototipo acepta un CSV normalizado con revisión manual y soporte bancario original; los adaptadores de formatos de respuesta propios de cada convenio todavía no están implementados. Los pagos parciales por beneficiario, reintentos tras rechazo, reapertura y ajustes de cierres requieren un flujo de reversión contable; esta versión reserva un mes completo una vez y bloquea modificaciones posteriores.
 
-## Revisión del sistema Guía existente
+## Revisión del sistema Guía existente (histórica, 2026-10-03)
 
-El 3 de octubre de 2026 se identificó y consultó [jcastano17/Guia](https://github.com/jcastano17/Guia), rama `claude/zealous-newton-toq99y`, mediante GitHub autenticado. Se leyeron su README, arquitectura, arranque de API, dependencias de contexto, permisos, bandeja de salida y routers de organización, clínica, facturación y documentos. Esta revisión establece el destino técnico; no acredita una conexión ya ejecutada.
+Sección histórica. Describe el estado observado en la rama de Guía revisada el 3 de octubre de 2026, cuando esa revisión no identificó un dominio `ops`. Sus criterios de diseño siguen siendo útiles; sus afirmaciones de estado se corrigen al final de la sección.
 
-Guía es un monolito modular FastAPI/Python con SQLAlchemy/PostgreSQL y frontend React/TypeScript. Sus dominios comparten transacción, identidad, auditoría, idempotencia y eventos. Por ello la versión operativa de OPS debe incorporarse como dominio `ops` del backend y pantallas del frontend existente. El servidor Node/SQLite de este repositorio queda como prototipo verificable de reglas y flujo. La migración debe conservar los vectores de cálculo y casos de prueba; no se debe desplegar el prototipo como maestro paralelo de usuarios o contratos.
+El 3 de octubre de 2026 se identificó y consultó [jcastano17/Guia](https://github.com/jcastano17/Guia), rama `claude/zealous-newton-toq99y`, mediante GitHub autenticado. Se leyeron su README, arquitectura, arranque de API, dependencias de contexto, permisos, bandeja de salida y routers de organización, clínica, facturación y documentos. Esa revisión estableció el destino técnico; no acreditó una conexión ejecutada.
+
+Guía es un monolito modular FastAPI/Python con SQLAlchemy/PostgreSQL y frontend React/TypeScript. Sus dominios comparten transacción, identidad, auditoría, idempotencia y eventos. Por ello se definió que la versión operativa de OPS se incorporara como dominio `ops` del backend y pantallas del frontend existente. El servidor Node/SQLite de este repositorio queda como prototipo verificable de reglas y flujo. La migración debe conservar los vectores de cálculo y casos de prueba; no se debe desplegar el prototipo como maestro paralelo de usuarios o contratos.
 
 | Punto revisado | Aplicación al módulo OPS |
 |---|---|
@@ -88,6 +105,6 @@ Guía es un monolito modular FastAPI/Python con SQLAlchemy/PostgreSQL y frontend
 | Auditoría y bandeja de salida transaccionales | Guardar cambio OPS, evidencia y evento en la misma transacción de Guía. Agregar manejadores de eventos OPS y conciliación; la consulta incremental del prototipo no es todavía un consumidor integrado. |
 | Permisos por operación y segregación | Extender permisos para contratista, supervisor, auditor, contabilidad y tesorería. El rol clínico o de facturación existente no concede por sí solo acceso a cuentas bancarias o ejecución de giros. |
 
-Las rutas nativas propuestas bajo `/api/ops` no existen todavía en Guía. Tampoco hay evidencia, en los routers revisados, de un módulo completo de CxP/tesorería de contratistas; esa extensión requiere modelos y flujo propios, conectados con los dominios existentes. La integración se considerará verificada cuando un recorrido con dos IPS pruebe aislamiento, acceso revocado, prestaciones compartidas, liquidación conciliada, aprobación separada, reintentos sin duplicados y respuesta bancaria por beneficiario.
+**Corrección (2026-11-18).** En la revisión de octubre se escribió que las rutas propuestas bajo `/api/ops` no existían y que el módulo entero estaba pendiente. Eso describía la rama de entonces. En `main` a 2026-11-18, `main.py` registra `guia.ops.router` con prefijo `/api` y `ops/router.py` declara el prefijo `/ops`, de modo que las rutas `/api/ops` existen. Lo que no se ha verificado es el alcance funcional de ese dominio frente al prototipo: qué parte de CxP/tesorería de contratistas, conciliación bancaria y eventos está implementada con paridad. La integración se considerará verificada cuando un recorrido con dos IPS pruebe aislamiento, acceso revocado, prestaciones compartidas, liquidación conciliada, aprobación separada, reintentos sin duplicados y respuesta bancaria por beneficiario; esa prueba no se ejecutó como parte de esta revisión documental.
 
-Fuentes de arquitectura del repositorio revisado: [ADR de Guía](https://github.com/jcastano17/Guia/blob/claude/zealous-newton-toq99y/docs/04-arquitectura.md), [registro de routers](https://github.com/jcastano17/Guia/blob/claude/zealous-newton-toq99y/backend/src/guia/main.py), [contexto e idempotencia](https://github.com/jcastano17/Guia/blob/claude/zealous-newton-toq99y/backend/src/guia/deps.py). Referencias de archivos verificadas: arquitectura `752c596c`, arranque `f32aa668`, dependencias `488d8d09`, organización `d5e3e795`, clínica `5a3d887d`, facturación `91f9d05e` y documentos `adb1ccc0` (SHA de cada archivo, no del commit).
+Fuentes de arquitectura de la rama revisada en octubre de 2026 (enlaces a esa rama, conservados por trazabilidad; las fuentes vigentes de `main` están en [Estado actual verificable](#estado-actual-verificable-revisión-2026-11-18)): [ADR de Guía](https://github.com/jcastano17/Guia/blob/claude/zealous-newton-toq99y/docs/04-arquitectura.md), [registro de routers](https://github.com/jcastano17/Guia/blob/claude/zealous-newton-toq99y/backend/src/guia/main.py), [contexto e idempotencia](https://github.com/jcastano17/Guia/blob/claude/zealous-newton-toq99y/backend/src/guia/deps.py). Referencias de archivos verificadas: arquitectura `752c596c`, arranque `f32aa668`, dependencias `488d8d09`, organización `d5e3e795`, clínica `5a3d887d`, facturación `91f9d05e` y documentos `adb1ccc0` (SHA de cada archivo, no del commit).

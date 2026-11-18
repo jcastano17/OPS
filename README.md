@@ -1,6 +1,6 @@
 # Guía · Módulo OPS para VIVIR
 
-Módulo de Guía para radicación, auditoría, liquidación mensual y preparación de pagos OPS de VIVIR, con API y eventos para integración con RCM. Incluye una demostración local con datos ficticios. Se revisó el proyecto `jcastano17/Guia`: la integración operativa debe incorporarse a su monolito modular FastAPI/PostgreSQL y su interfaz React, compartiendo contexto por IPS. El prototipo Node/SQLite aún no está conectado a ese sistema. Los puntos de conexión y diferencias están en [docs/INTEGRACION_RCM.md](docs/INTEGRACION_RCM.md).
+Módulo de Guía para radicación, auditoría, liquidación mensual y preparación de pagos OPS de VIVIR, con API y eventos para integración con RCM. **Este repositorio conserva el prototipo Node/SQLite** y su demostración local con datos ficticios. El módulo integrado se desarrolla en [jcastano17/Guia](https://github.com/jcastano17/Guia), un monolito modular FastAPI/PostgreSQL con interfaz React y arquitectura de despliegue en Azure; ver [Arquitectura actual](#arquitectura-actual-revisión-2026-11-18). Las funciones descritas abajo son las del prototipo; su paridad en Guía debe verificarse contra ese repositorio y no se asume por estar listadas aquí. Los puntos de conexión y diferencias están en [docs/INTEGRACION_RCM.md](docs/INTEGRACION_RCM.md).
 
 ## Iniciar
 
@@ -25,7 +25,9 @@ Las credenciales iniciales de administración se usan solo al crear la base. Adm
 
 Para probar la liquidación y el paquete bancario, inicia `npm run demo:finance` en lugar de `npm run demo`. Utiliza una base separada en `data/demo-finance/` con tres cuentas ficticias, dos contratistas y dos bancos destino. Las auditorías están simuladas y no certifican documentos reales. Todo archivo de esta demostración es para pruebas y no debe cargarse al banco.
 
-## Funciones
+## Funciones del prototipo
+
+Todo lo siguiente está implementado en el servidor Node/SQLite de este repositorio. No describe lo que ya existe en el módulo `ops` de Guía ni en su despliegue.
 
 - Acceso por contraseña, perfiles de contratista y administración. Cada contratista solo ve sus propios contratos, cuentas y documentos.
 - Contratos con vigencia, supervisor y honorario mensual de referencia.
@@ -67,7 +69,21 @@ Reglas implementadas:
 
 Los parámetros por año están en [config/policy.json](config/policy.json), con fuentes oficiales para SMMLV y UVT. Se pueden editar o usar otro archivo mediante `POLICY_FILE`. No hay valores predeterminados para otros años: deben configurarse antes de radicar periodos de esas vigencias.
 
-El proyecto Supabase seleccionado y la preparación de la conexión PostgreSQL de Guía están documentados en [docs/SUPABASE.md](docs/SUPABASE.md). El acceso al panel se verificó; la conexión privada del backend y las migraciones aún están pendientes. Esta demostración sigue usando SQLite.
+## Arquitectura actual (revisión 2026-11-18)
+
+Revisión de código y documentación de la rama `main` de `jcastano17/Guia`, realizada mediante GitHub el 2026-11-18 sobre el commit [6c5fe5b](https://github.com/jcastano17/Guia/commit/6c5fe5b06e09459b965481703e8b761c209782f6). Esta revisión describe la arquitectura y el código consultados; la configuración efectiva y la versión desplegada en Azure requieren su propia verificación.
+
+| Componente | Estado en la revisión de Guía | Fuente |
+|---|---|---|
+| API OPS | `main.py` registra `guia.ops.router` y `router_world_office` con prefijo `/api`; `ops/router.py` declara `APIRouter(prefix="/ops")`, por lo que las rutas nativas cuelgan de `/api/ops`. | [backend/src/guia/main.py](https://github.com/jcastano17/Guia/blob/6c5fe5b06e09459b965481703e8b761c209782f6/backend/src/guia/main.py), [backend/src/guia/ops/router.py](https://github.com/jcastano17/Guia/blob/6c5fe5b06e09459b965481703e8b761c209782f6/backend/src/guia/ops/router.py) |
+| Base de datos | PostgreSQL configurado en `config.py`; en despliegue, Azure Database for PostgreSQL Flexible Server. | [backend/src/guia/config.py](https://github.com/jcastano17/Guia/blob/6c5fe5b06e09459b965481703e8b761c209782f6/backend/src/guia/config.py), [docs/13-despliegue-azure.md](https://github.com/jcastano17/Guia/blob/6c5fe5b06e09459b965481703e8b761c209782f6/docs/13-despliegue-azure.md) |
+| Documentos | `documentos_backend` con opciones `local` o `azure_blob`; en despliegue, Azure Blob Storage. | `config.py`, `docs/13-despliegue-azure.md` |
+| Identidad | Proveedores Google y Microsoft Entra declarados en `config.py`. | `config.py` |
+| Secretos | Azure Key Vault. | `config.py`, `docs/13-despliegue-azure.md` |
+| Cómputo y borde | Azure Container Apps (API y web) detrás de Azure Front Door. | `docs/13-despliegue-azure.md` |
+| Este repositorio | Prototipo Node/SQLite, demostración local y vectores de prueba. Su arranque local es independiente del módulo integrado de Guía. | Este README |
+
+Supabase fue el PostgreSQL candidato en la revisión de octubre de 2026; la arquitectura de Guía usa PostgreSQL Flexible Server en Azure. **La conexión a Supabase no es un pendiente de la arquitectura actual.** El antecedente, incluida la inspección de solo lectura del 2026-10-03 y sus herramientas, se conserva en [docs/SUPABASE.md](docs/SUPABASE.md) como documento histórico. Esta demostración sigue usando SQLite.
 
 ## Datos y controles
 
@@ -83,11 +99,11 @@ npm test
 
 Las pruebas usan datos ficticios y bases temporales. Cubren el flujo y permisos, límites de los siete tramos 383, control anual, glosas y descuentos, deducciones, consolidación de ICA y PILA, formatos bancarios y ceros iniciales, fórmulas Excel, cierre único, ZIP, eventos para RCM, importación bancaria con evidencia, reintentos sin duplicados, estados de pago, vista previa sin escrituras y persistencia de lotes y conciliación tras reiniciar.
 
-## Pendiente para operación real
+## Límites y pendientes del prototipo
 
 - Completar la matriz tributaria municipal/actividad con las normas y situaciones reales de VIVIR. ICA no se excluye ni se retiene universalmente por ser IPS. El tratamiento debe sustentarse por operación; se documenta en [docs/CRITERIOS_LIQUIDACION.md](docs/CRITERIOS_LIQUIDACION.md).
 - Validar el convenio bancario y aceptación de PAB/SAP con el banco pagador. Otros bancos tienen relaciones por destino y perfiles pendientes de especificación del canal; aún no todos tienen plano nativo implementado.
-- Conexión al RCM real, SSO y maestros corporativos, lectores de respuesta propios de cada banco, reversión/reintentos de giros y separación de permisos por rol. No se ha establecido la conexión solo por ofrecer API/eventos.
+- Verificar la paridad entre las reglas y funciones de este prototipo y el módulo `ops` de Guía (identidad compartida, maestros corporativos, lectores de respuesta propios de cada banco, reversión/reintentos de giros y separación de permisos por rol). Ofrecer API/eventos en el prototipo no establece esa conexión.
 - AFC/pensión voluntaria, pagos acumulados o mensualización especial y otros tratamientos fiscales particulares requieren ampliar el motor; no se liquidan como cero.
 - Ratificar el flujo de aprobación y roles de jefe, auditoría, contabilidad y tesorería. Los cuatro estados actuales son una propuesta de primera versión.
 - Calendario de días hábiles, marca de entrega tardía y fecha efectiva de radicación corregida. No se calculan plazos ni fechas de pago todavía.
@@ -96,4 +112,4 @@ Las pruebas usan datos ficticios y bases temporales. Cubren el flujo y permisos,
 - Retención de versiones anteriores de documentos y ajuste del cuadro al formato de Contabilidad definitivo. Los snapshots de lotes sí preservan sus datos y cálculos originales.
 - Hosting HTTPS, respaldos y retención, recuperación/cambio de contraseñas y controles operativos para acceso de usuarios reales.
 
-No hay despliegue público, correos ni procesamiento de pagos en esta versión.
+Este prototipo no tiene despliegue público, correos ni procesamiento de pagos. El despliegue en Azure corresponde al repositorio de Guía y no se certifica desde aquí.

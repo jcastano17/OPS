@@ -1,6 +1,12 @@
-"""Comprueba el proyecto elegido con una transacción de SOLO LECTURA.
+"""Comprueba el proyecto Supabase elegido con una transacción de SOLO LECTURA.
 
-Ejecutar con psycopg del entorno del backend Guía:
+MATERIAL HISTÓRICO (revisión 2026-11-18): herramienta preparada en octubre de 2026
+para el proyecto Supabase entonces candidato. Guía (main) usa PostgreSQL en Azure;
+este script no es necesario para esa arquitectura y se conserva sin cambios en su
+código ejecutable como registro. Al corte documentado del 2026-10-03 no se había
+ejecutado contra el proyecto; no se comprobó su estado posterior. Ver docs/SUPABASE.md.
+
+Forma de invocación documentada en su momento, con psycopg del entorno del backend Guía:
     uv run python /ruta/OPS/integrations/supabase/probe.py --env-file /ruta/OPS/.env.supabase
 No crea tablas, roles, credenciales ni usuarios. No imprime la URL ni contraseña.
 """
