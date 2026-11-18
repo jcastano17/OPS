@@ -83,7 +83,7 @@ Revisión de código y documentación de la rama `main` de `jcastano17/Guia`, re
 | Cómputo y borde | Azure Container Apps (API y web) detrás de Azure Front Door. | `docs/13-despliegue-azure.md` |
 | Este repositorio | Prototipo Node/SQLite, demostración local y vectores de prueba. Su arranque local es independiente del módulo integrado de Guía. | Este README |
 
-Supabase fue el PostgreSQL candidato en la revisión de octubre de 2026; la arquitectura de Guía usa PostgreSQL Flexible Server en Azure. **La conexión a Supabase no es un pendiente de la arquitectura actual.** El antecedente, incluida la inspección de solo lectura del 2026-10-03 y sus herramientas, se conserva en [docs/SUPABASE.md](docs/SUPABASE.md) como documento histórico. Esta demostración sigue usando SQLite.
+La arquitectura vigente de Guía es FastAPI sobre PostgreSQL Flexible Server en Azure, con Blob Storage, Key Vault, Container Apps y Front Door, según la tabla anterior. **Supabase no es una conexión pendiente ni una dependencia de este prototipo Node/SQLite**; ningún archivo de arranque, `package.json` ni la integración continua lo requieren. La preparación exploratoria de octubre de 2026 se retiró del árbol del repositorio y se conserva únicamente en el historial Git, en el commit [b173e78](https://github.com/jcastano17/OPS/commit/b173e78ee93c3466da1de3f3b4bf23ce8c80f734). Esta demostración sigue usando SQLite.
 
 ## Datos y controles
 
